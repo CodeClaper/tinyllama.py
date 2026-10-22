@@ -1,11 +1,13 @@
 import argparse
 import fastapi
+import json
 import uvicorn
 
 from http import HTTPStatus
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from src.config import CacheConfig, ModelConfig
 from src.defs import CompletionRequest, ErrorResponse
 from src.engine.engine import Engine
@@ -36,7 +38,10 @@ async def get_available_models():
 @app.post("/v1/completions")
 async def create_completion(raw_request: Request):
     """Completeion API similar to OpenAI's API. """
-    request = CompletionRequest(**await raw_request.json())
+    try:
+        request = CompletionRequest(**await raw_request.json())
+    except (json.JSONDecodeError, ValidationError) as exc:
+        return create_error_response(HTTPStatus.BAD_REQUEST, f"Invalid request: {exc}")
     return create_error_response(HTTPStatus.INTERNAL_SERVER_ERROR, "Not support now.")
 
 if __name__ == "__main__":

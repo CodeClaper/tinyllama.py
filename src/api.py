@@ -18,12 +18,14 @@ def create_error_response(status_code: HTTPStatus, message: str) -> JSONResponse
         status_code=status_code
     )
 
-def create_model_config() -> ModelConfig:
-    return ModelConfig(model="qwen2", dtype="auto")
+def create_model_config(args: argparse.Namespace) -> ModelConfig:
+    """Create the ModelConfig from the parsed command-line arguments. """
+    return ModelConfig(model=args.model, dtype=args.dtype)
 
 
-def create_cache_config() -> CacheConfig:
-    return CacheConfig(block_size=1024, swap_space=4096)
+def create_cache_config(args: argparse.Namespace) -> CacheConfig:
+    """Create the CacheConfig by the parser. """
+    return CacheConfig(block_size=args.block_size, swap_space=args.swap_space)
 
 @app.get("/v1/models")
 async def get_available_models():
@@ -38,9 +40,15 @@ async def create_completion(raw_request: Request):
     return create_error_response(HTTPStatus.INTERNAL_SERVER_ERROR, "Not support now.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Tinyllama.py OpenAI-Compatible RESTful API server.")
-    parser.add_argument("--host", type=str, default="localhost", help="host name")
-    parser.add_argument("--port", type=int, default=8080, help="port number")
+    parser = argparse.ArgumentParser(prog="python -m src.api", description="Tinyllama.py OpenAI-Compatible RESTful API server.")
+    parser.add_argument("--host",       type=str, default="localhost", help="host name")
+    parser.add_argument("--port",       type=int, default=8080, help="port number")
+    parser.add_argument("--model",      type=str, help="name or path the huggingface model to use")
+    parser.add_argument("--block-size", type=int, default=16, choices=[8, 16, 32], help="token block size")
+    parser.add_argument("--swap_space", type=int, default=8, help="CPU swap space size (GB) per GPU.")
+    parser.add_argument("--dtype",      type=str, default="auto", choices=['auto', 'half', 'bfloat16', 'float'], help='data type for model weights and activations. '
+                                                                                                                      'The "auto" option will use FP16 precision '
+                                                                                                                      'for FP32 and FP16 models, and BF precision for BF16 models')
     args = parser.parse_args()
     app.add_middleware(
         CORSMiddleware,
@@ -48,7 +56,8 @@ if __name__ == "__main__":
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    model_config = create_model_config()
-    cache_config = create_cache_config()
+    model_config = create_model_config(args)
+    cache_config = create_cache_config(args)
     engine = Engine(model_config=model_config, cache_config=cache_config)
     uvicorn.run(app=app, host=args.host, port=args.port, log_level="info", timeout_keep_alive=10)
+

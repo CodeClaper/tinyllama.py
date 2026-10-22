@@ -1,8 +1,30 @@
 import time
 
-from typing import Optional, List
+from typing import Optional, List, Union, Dict
 from pydantic import BaseModel, Field
 from src.utils import random_uuid
+
+class CompletionRequest(BaseModel):
+    model: str
+    prompt: str
+    suffix: Optional[str] = None
+    max_tokens: Optional[int] = 16
+    temperature: Optional[float] = 1.0
+    top_p: Optional[float] = 1.0
+    n: Optional[int] = 1
+    stream: Optional[bool] = False
+    logprobs: Optional[int] = None
+    echo: Optional[bool] = False
+    stop: Optional[Union[str, List[str]]] = Field(default_factory=list)
+    presence_penalty: Optional[float] = 0.0
+    frequency_penalty: Optional[float] = 0.0
+    best_of: Optional[int] = None
+    logit_bias: Optional[Dict[str, float]] = None
+    user: Optional[str] = None
+    # Additional parameters supported by vLLM
+    top_k: Optional[int] = -1
+    ignore_eos: Optional[bool] = False
+    use_beam_search: Optional[bool] = False
 
 class ErrorResponse(BaseModel):
     object: str = "error"

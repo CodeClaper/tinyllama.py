@@ -6,7 +6,9 @@ from http import HTTPStatus
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from src.defs import ErrorResponse
+from src.config import CacheConfig, ModelConfig
+from src.defs import CompletionRequest, ErrorResponse
+from src.engine.engine import Engine
 
 app = fastapi.FastAPI()
 
@@ -15,6 +17,13 @@ def create_error_response(status_code: HTTPStatus, message: str) -> JSONResponse
         ErrorResponse(message=message, type="invalid_request_error").model_dump(),
         status_code=status_code
     )
+
+def create_model_config() -> ModelConfig:
+    return ModelConfig(model="qwen2", dtype="auto")
+
+
+def create_cache_config() -> CacheConfig:
+    return CacheConfig(block_size=1024, swap_space=4096)
 
 @app.get("/v1/models")
 async def get_available_models():
@@ -25,6 +34,7 @@ async def get_available_models():
 @app.post("/v1/completions")
 async def create_completion(raw_request: Request):
     """Completeion API similar to OpenAI's API. """
+    request = CompletionRequest(**await raw_request.json())
     return create_error_response(HTTPStatus.INTERNAL_SERVER_ERROR, "Not support now.")
 
 if __name__ == "__main__":
@@ -38,4 +48,7 @@ if __name__ == "__main__":
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    model_config = create_model_config()
+    cache_config = create_cache_config()
+    engine = Engine(model_config=model_config, cache_config=cache_config)
     uvicorn.run(app=app, host=args.host, port=args.port, log_level="info", timeout_keep_alive=10)

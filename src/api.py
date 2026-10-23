@@ -24,9 +24,8 @@ def create_model_config(args: argparse.Namespace) -> ModelConfig:
     """Create the ModelConfig from the parsed command-line arguments. """
     return ModelConfig(model=args.model, dtype=args.dtype)
 
-
 def create_cache_config(args: argparse.Namespace) -> CacheConfig:
-    """Create the CacheConfig by the parser. """
+    """Create the CacheConfig from the parsed command-line arguments. """
     return CacheConfig(block_size=args.block_size, swap_space=args.swap_space)
 
 @app.get("/v1/models")
@@ -63,6 +62,6 @@ if __name__ == "__main__":
     )
     model_config = create_model_config(args)
     cache_config = create_cache_config(args)
-    engine = Engine(model_config=model_config, cache_config=cache_config)
+    engine       = Engine(model_config=model_config, cache_config=cache_config)
     uvicorn.run(app=app, host=args.host, port=args.port, log_level="info", timeout_keep_alive=10)
 

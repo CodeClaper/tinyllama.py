@@ -12,8 +12,10 @@ class Engine:
         self.model_config = model_config
         self.cache_config = cache_config
         self.workers = []
+        self._init_workers()
+        self._init_cache()
     
-    def __init_workers(self) -> None:
+    def _init_workers(self) -> None:
         """Initialize the workers and their configuration. """
         pass
 

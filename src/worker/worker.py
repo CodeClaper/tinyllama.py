@@ -2,6 +2,7 @@ import torch
 
 from typing import Tuple
 from src.config import ModelConfig
+from src.sample_params import SampleParams
 
 
 class Worker:
@@ -23,6 +24,6 @@ class Worker:
         Profile the memory usage of the model and get the maxium number of cache
         blocks than can be allocated with the remaining free memory.
         """
-
-
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_host_memory_stats()
         return 1, 2

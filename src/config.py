@@ -17,11 +17,28 @@ class ModelConfig:
         use_np_weights: bool,
     ) -> None:
         self.model = model
-        self.hf_config: PretrainedConfig = AutoConfig.from_pretrained(model)
-        self.dtype = _get_and_verify_dtype(self.hf_config, dtype)
         self.download_dir = download_dir
         self.local_dir = local_dir
         self.use_np_weights = use_np_weights
+
+        if local_dir and download_dir:
+            raise ValueError("--local-dir and --download-dir are mutually exclusive.")
+        if local_dir:
+            self.model_path = local_dir
+            self.local_files_only = True
+        else:
+            self.model_path = model
+            self.local_files_only = False
+
+        hf_kwargs = {}
+        if download_dir:
+            hf_kwargs["cache_dir"] = download_dir
+        self.hf_config: PretrainedConfig = AutoConfig.from_pretrained(
+            self.model_path,
+            local_files_only=self.local_files_only,
+            **hf_kwargs,
+        )
+        self.dtype = _get_and_verify_dtype(self.hf_config, dtype)
 
 
 class CacheConfig:

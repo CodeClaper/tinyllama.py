@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from src.config import CacheConfig, ModelConfig
 from src.defs import CompletionRequest, ErrorResponse
 from src.engine.engine import Engine
+from src.logger import setup_logging
 
 app = fastapi.FastAPI()
 
@@ -50,6 +51,7 @@ async def create_completion(raw_request: Request):
     return create_error_response(HTTPStatus.INTERNAL_SERVER_ERROR, "Not support now.")
 
 if __name__ == "__main__":
+    setup_logging()
     parser = argparse.ArgumentParser(prog="python -m src.api", description="Tinyllama.py OpenAI-Compatible RESTful API server.")
     parser.add_argument("--host",       type=str, default="localhost", help="host name")
     parser.add_argument("--port",       type=int, default=8080, help="port number")
@@ -72,5 +74,5 @@ if __name__ == "__main__":
     model_config = create_model_config(args)
     cache_config = create_cache_config(args)
     engine       = Engine(model_config=model_config, cache_config=cache_config)
-    uvicorn.run(app=app, host=args.host, port=args.port, log_level="info", timeout_keep_alive=10)
+    uvicorn.run(app=app, host=args.host, port=args.port, log_level="info", log_config=None, timeout_keep_alive=10)
 

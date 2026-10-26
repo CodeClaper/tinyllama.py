@@ -26,9 +26,11 @@ class ModelConfig:
         if local_dir:
             self.model_path = local_dir
             self.local_files_only = True
+            logger.info(f"Load {model} from local directory.")
         else:
             self.model_path = model
             self.local_files_only = False
+            logger.info(f"Load {model} by downloading.")
 
         hf_kwargs = {}
         if download_dir:
@@ -65,7 +67,7 @@ def _get_and_verify_dtype(
     hf_config: PretrainedConfig,
     dtype: str
 ):
-    config_dtype = getattr(hf_config, "torch_dtype", None)
+    config_dtype = getattr(hf_config, "dtype", None)
     if config_dtype is None:
         config_dtype = torch.float32
     

@@ -21,7 +21,7 @@ A lightweight and fast LLM inference engine **inspired by** [vLLM](https://githu
 python -m venv .venv
 source .venv/bin/activate
 
-pip install -r requirements.txt
+pip install .
 ```
 
 ## Usage
@@ -95,8 +95,7 @@ curl http://localhost:8080/v1/completions \
 │   │   └── qwen35.py   # Qwen3.5 backend
 │   └── worker/
 │       └── worker.py   # Model execution worker
-├── requirements.txt
-└── setup.py
+└── pyproject.toml
 ```
 
 ## Roadmap

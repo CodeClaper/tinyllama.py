@@ -1,17 +1,14 @@
 # tinyllama.py
 
-A lightweight and fast LLM inference engine **inspired by** [vLLM](https://github.com/vllm-project/vllm), exposing an OpenAI-compatible RESTful API. It is an independent implementation and does not depend on or build upon the vLLM codebase.
+A lightweight and fast LLM inference engine **inspired by** [vLLM](https://github.com/vllm-project/vllm), exposing an OpenAI-compatible RESTful API. 
 
 ## Features
 
 - Lightweight, easy-to-run inference server
 - OpenAI-compatible `/v1/models` and `/v1/completions` endpoints
-- CORS enabled for cross-origin clients
 - Pluggable model backends (Qwen2.5, Qwen3.5)
 - Load models from Hugging Face or a local directory
 - Configurable dtype with automatic selection from the model config
-- Unified logging via [Loguru](https://github.com/Delgan/loguru)
-- Minimal server dependencies: FastAPI + Uvicorn
 
 ## Requirements
 

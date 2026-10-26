@@ -53,7 +53,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="python -m src.api", description="Tinyllama.py OpenAI-Compatible RESTful API server.")
     parser.add_argument("--host",       type=str, default="localhost", help="host name")
     parser.add_argument("--port",       type=int, default=8080, help="port number")
-    parser.add_argument("--model",      type=str, help="name or path the huggingface model to use")
+    parser.add_argument("--model",      type=str, required=True, help="name or path the huggingface model to use")
     parser.add_argument("--block-size", type=int, default=16, choices=[8, 16, 32], help="token block size")
     parser.add_argument("--swap_space", type=int, default=8, help="CPU swap space size (GB) per GPU.")
     parser.add_argument("--dtype",      type=str, default="auto", choices=['auto', 'half', 'bfloat16', 'float'], help='data type for model weights and activations. '

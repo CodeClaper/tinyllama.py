@@ -1,7 +1,7 @@
 
 from typing import List, Optional, Union
 
-class SampleParams:
+class SamplerParams:
     """Sample paramaters for text generation.
     Args:
         n: Number of output sequences to return for the given prompt.
@@ -102,7 +102,7 @@ class SampleParams:
 
         
     def __repr__(self) -> str:
-        return (f"SampleParams(n={self.n}, "
+        return (f"SamplerParams(n={self.n}, "
                 f"best_of={self.best_of}, "
                 f"presence_penalty={self.presence_penalty}, "
                 f"frequency_penalty={self.frequency_penalty}, "

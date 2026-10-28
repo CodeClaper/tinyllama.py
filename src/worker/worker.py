@@ -1,7 +1,8 @@
 import torch
 
 from typing import Tuple
-from src.config import ModelConfig
+from src.config import ModelConfig, SchedulerConfig
+from src.model.model_loader import load_model
 from src.sample_params import SampleParams
 
 
@@ -10,9 +11,12 @@ class Worker:
 
     def __init__(
         self,
-        model_config: ModelConfig
+        model_config: ModelConfig,
+        schduler_config: SchedulerConfig,
     ) -> None:
         self.model_config = model_config
+        self.schduler_config = schduler_config
+        self.model = load_model(self.model_config)
 
     def profile_num_available_blocks(
         self,
@@ -26,4 +30,11 @@ class Worker:
         """
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_host_memory_stats()
+
+        sample_params = SampleParams(top_p=0.99, top_k=-1)
+        max_num_batched_tokens = self.schduler_config.max_num_batched_tokens
+        max_num_seqs = self.schduler_config.max_num_seqs
+        seqs = []
+        for group_id in range(max_num_seqs):
+            seq_len = (max_num_batched_tokens // max_num_seqs + (group_id < max_num_batched_tokens % max_num_seqs))
         return 1, 2

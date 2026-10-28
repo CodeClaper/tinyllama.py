@@ -56,6 +56,24 @@ class CacheConfig:
         self.num_gpu_blocks = 0
         self.num_cpu_blocks = 0
 
+
+class SchedulerConfig:
+    """
+    Schduler configuration.
+
+    Args:
+        max_num_batched_tokens: Maximum number of tokens to be process in a single iteration.
+        max_num_seqs: Maximum number of sequences to be processed in a single iteration.
+    """
+    def __init__(
+        self,
+        max_num_batched_tokens: int,
+        max_num_seqs: int
+    ):
+        self.max_num_batched_tokens = max_num_batched_tokens
+        self.max_num_seqs = max_num_seqs
+
+
 _STR_DTYPE_TO_TORCH_DTYPE = {
     "half": torch.float16,
     "float16": torch.float16,

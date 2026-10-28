@@ -13,3 +13,9 @@ class Qwen35Model(nn.Module):
         input_ids: torch.Tensor
     ) -> Dict[int, Any]:
         return {}
+
+    def load_weights(
+        self, 
+        model_name_or_path: str,
+    ):
+        pass

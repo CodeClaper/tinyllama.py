@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 class Qwen25Model(nn.Module):
 
@@ -13,3 +13,9 @@ class Qwen25Model(nn.Module):
         input_ids: torch.Tensor
     ) -> Dict[int, Any]:
         return {}
+
+    def load_weights(
+        self, 
+        model_name_or_path: str,
+    ):
+        pass

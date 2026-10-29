@@ -1,30 +1,7 @@
-from pathlib import Path
-from typing import Any
-
 import torch
 from torch import nn
 
-_EXTENSION: Any | None = None
-
-
-def _get_extension() -> Any:
-    """Compile the C++/CUDA sources on first use and cache the module."""
-    global _EXTENSION
-    if _EXTENSION is None:
-        from torch.utils.cpp_extension import load
-
-        root = Path(__file__).resolve().parents[3]
-        _EXTENSION = load(
-            name="tinyllama_attention",
-            sources=[
-                str(root / "cscr" / "attention.cpp"),
-                str(root / "cscr" / "attention_kernel.cu"),
-            ],
-            extra_cflags=["-O3"],
-            extra_cuda_cflags=["-O3", "--use_fast_math"],
-            verbose=False,
-        )
-    return _EXTENSION
+from cscr import attention as _C
 
 
 def paged_attention(
@@ -48,7 +25,7 @@ def paged_attention(
     Returns:
         ``[num_seqs, num_heads, head_dim]``.
     """
-    return _get_extension().paged_attention(
+    return _C.paged_attention(
         query, key_cache, value_cache, block_tables, seq_lens, float(scale)
     )
 

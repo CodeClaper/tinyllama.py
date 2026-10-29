@@ -1,8 +1,11 @@
 import time
+import torch
 
-from typing import Optional, List, Union, Dict
+from typing import Optional, List, Tuple, Union, Dict
 from pydantic import BaseModel, Field
 from src.utils import random_uuid
+
+KVCache = Tuple[torch.Tensor, torch.Tensor]
 
 class CompletionRequest(BaseModel):
     model: str

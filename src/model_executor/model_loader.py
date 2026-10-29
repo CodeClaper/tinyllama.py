@@ -4,13 +4,11 @@ import torch
 import torch.nn as nn
 
 from src.config import ModelConfig
-from src.model.qwen25 import Qwen25Model
-from src.model.qwen35 import Qwen35Model
+from src.model_executor.models.qwen2 import Qwen2ForCausalLM
 from transformers import PretrainedConfig
 
 _MODEL_REGISTRY_LIST = {
-    "qwen25": Qwen25Model,
-    "qwen35": Qwen35Model
+    "qwen25": Qwen2ForCausalLM,
 }
 
 def _get_model_arch(config: PretrainedConfig) -> Type[nn.Module]:

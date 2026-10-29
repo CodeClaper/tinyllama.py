@@ -1,13 +1,14 @@
 import argparse
-import fastapi
 import json
-import uvicorn
-
 from http import HTTPStatus
+
+import fastapi
+import uvicorn
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+
 from src.config import CacheConfig, ModelConfig
 from src.defs import CompletionRequest, ErrorResponse
 from src.engine.engine import Engine

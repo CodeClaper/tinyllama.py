@@ -1,6 +1,8 @@
+from typing import Any
+
 import torch
-import torch.nn as nn
-from typing import Any, Dict
+from torch import nn
+
 
 class Qwen35Model(nn.Module):
 
@@ -11,7 +13,7 @@ class Qwen35Model(nn.Module):
     def forward(
         self, 
         input_ids: torch.Tensor
-    ) -> Dict[int, Any]:
+    ) -> dict[int, Any]:
         return {}
 
     def load_weights(

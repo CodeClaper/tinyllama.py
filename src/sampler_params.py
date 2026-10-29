@@ -1,5 +1,5 @@
 
-from typing import List, Optional, Union
+
 
 class SamplerParams:
     """Sample paramaters for text generation.
@@ -37,14 +37,14 @@ class SamplerParams:
     def __init__(
         self,
         n: int = 1,
-        best_of: Optional[int] = None,
+        best_of: int | None = None,
         presence_penalty: float = 0.0,
         frequency_penalty: float = 0.0,
         temperature: float = 1.0,
         top_p: float = 1.0,
         top_k: int = -1,
         use_beam_search: bool = False,
-        stop: Union[str, List[str]] = [],
+        stop: str | list[str] = [],
         ignore_eos: bool = False,
         max_tokens: int = 16,
     ) -> None:

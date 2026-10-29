@@ -1,6 +1,7 @@
 
 from src.config import CacheConfig, ModelConfig
 
+
 class Engine:
     """An engine that receives requests and generates texts."""
 
@@ -17,10 +18,8 @@ class Engine:
     
     def _init_workers(self) -> None:
         """Initialize the workers and their configuration. """
-        pass
 
     def _init_cache(self) -> None:
         """Profiles the memory usage and intializes the KV cache."""
-        pass
 
 

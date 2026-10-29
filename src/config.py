@@ -1,4 +1,3 @@
-from typing import Optional
 
 import torch
 from loguru import logger
@@ -12,8 +11,8 @@ class ModelConfig:
         self,
         model: str,
         dtype: str,
-        download_dir: Optional[str],
-        local_dir: Optional[str],
+        download_dir: str | None,
+        local_dir: str | None,
         use_np_weights: bool,
     ) -> None:
         self.model = model
@@ -101,9 +100,7 @@ def _get_and_verify_dtype(
         torch_dtype = _STR_DTYPE_TO_TORCH_DTYPE[dtype]
 
     if torch_dtype != config_dtype:
-        if torch_dtype == torch.float32:
-            pass
-        elif config_dtype == torch.float32:
+        if torch_dtype == torch.float32 or config_dtype == torch.float32:
             pass
         else:
             logger.warning(f"Casting {config_dtype} to {torch_dtype}")

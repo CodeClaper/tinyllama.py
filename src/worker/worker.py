@@ -1,6 +1,6 @@
+
 import torch
 
-from typing import Tuple
 from src.config import ModelConfig, SchedulerConfig
 from src.model.model_loader import load_model
 from src.sampler_params import SamplerParams
@@ -23,7 +23,7 @@ class Worker:
         block_size: int,
         gpu_memory_utilization: float,
         cpu_swap_space: int
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         """
         Profile the memory usage of the model and get the maxium number of cache
         blocks than can be allocated with the remaining free memory.

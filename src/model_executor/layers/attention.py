@@ -4,32 +4,6 @@ from torch import nn
 from cscr import attention as _C
 
 
-def paged_attention(
-    query: torch.Tensor,
-    key_cache: torch.Tensor,
-    value_cache: torch.Tensor,
-    block_tables: torch.Tensor,
-    seq_lens: torch.Tensor,
-    scale: float,
-) -> torch.Tensor:
-    """PagedAttention decode forward.
-
-    Args:
-        query: ``[num_seqs, num_heads, head_dim]``.
-        key_cache: ``[num_blocks, num_kv_heads, block_size, head_dim]``.
-        value_cache: same shape as ``key_cache``.
-        block_tables: ``[num_seqs, max_blocks_per_seq]`` int32.
-        seq_lens: ``[num_seqs]`` int32.
-        scale: softmax scale, usually ``head_dim ** -0.5``.
-
-    Returns:
-        ``[num_seqs, num_heads, head_dim]``.
-    """
-    return _C.paged_attention(
-        query, key_cache, value_cache, block_tables, seq_lens, float(scale)
-    )
-
-
 class PagedAttention(nn.Module):
 
     def __init__(
@@ -51,13 +25,22 @@ class PagedAttention(nn.Module):
         block_tables: torch.Tensor,
         seq_lens: torch.Tensor,
     ) -> torch.Tensor:
-        return paged_attention(
-            query=query,
-            key_cache=key_cache,
-            value_cache=value_cache,
-            block_tables=block_tables,
-            seq_lens=seq_lens,
-            scale=self.scale,
+
+        """PagedAttention decode forward.
+
+        Args:
+            query: ``[num_seqs, num_heads, head_dim]``.
+            key_cache: ``[num_blocks, num_kv_heads, block_size, head_dim]``.
+            value_cache: same shape as ``key_cache``.
+            block_tables: ``[num_seqs, max_blocks_per_seq]`` int32.
+            seq_lens: ``[num_seqs]`` int32.
+            scale: softmax scale, usually ``head_dim ** -0.5``.
+
+        Returns:
+            ``[num_seqs, num_heads, head_dim]``.
+        """
+        return _C.paged_attention(
+            query, key_cache, value_cache, block_tables, seq_lens, float(self.scale)
         )
 
 

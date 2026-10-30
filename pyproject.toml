@@ -25,6 +25,7 @@ dependencies = [
     "torch",
     "loguru",
     "transformers",
+    "safetensors",
 ]
 
 [project.urls]

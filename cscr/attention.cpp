@@ -5,8 +5,7 @@
 #include "attention.h"
 
 torch::Tensor paged_attention(torch::Tensor query, torch::Tensor key_cache, torch::Tensor value_cache, 
-                              torch::Tensor block_tables, torch::Tensor seq_lens, double scale) 
-{
+                              torch::Tensor block_tables, torch::Tensor seq_lens, double scale) {
     TORCH_CHECK(query.is_cuda(), "query must be a CUDA tensor");
     TORCH_CHECK(key_cache.is_cuda(), "key_cache must be a CUDA tensor");
     TORCH_CHECK(value_cache.is_cuda(), "value_cache must be a CUDA tensor");

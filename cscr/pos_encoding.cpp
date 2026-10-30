@@ -9,8 +9,7 @@ torch::Tensor rotary_embedding_neox(
     const torch::Tensor& query,
     const torch::Tensor& key,
     int head_size,
-    const torch::Tensor& cos_sin_cache,
-    c10::cuda::CUDAStream stream) 
+    const torch::Tensor& cos_sin_cache) 
 {
     auto out = torch::empty_like(query);
     const at::cuda::OptionalCUDAGuard device_guard(query.device());

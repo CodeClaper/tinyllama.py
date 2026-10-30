@@ -92,6 +92,28 @@ class Qwen2ForCausalLM(nn.Module):
     def load_weights(
         self, 
         model_name_or_path: str,
+        local_dir: str,
+        use_np_weights: bool = False,
     ):
-        pass
+        from src.model_executor.model_loader import load_hf_weights
+
+        params = dict(self.named_parameters())
+        loaded = set()
+        for name, weight in load_hf_weights(
+            model_name_or_path,
+            local_dir,
+            use_np_weights,
+        ):
+            param = params.get(name)
+            if param is None:
+                continue
+            param.data.copy_(weight.to(device=param.device, dtype=param.dtype))
+            loaded.add(name)
+
+        missing = set(params) - loaded
+        if missing:
+            raise ValueError(
+                f"Missing weights for {len(missing)} parameters: "
+                f"{sorted(missing)[:5]}"
+            )
 

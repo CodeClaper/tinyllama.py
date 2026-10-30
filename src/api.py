@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from src.config import CacheConfig, ModelConfig
+from src.config import CacheConfig, ModelConfig, SchedulerConfig
 from src.defs import CompletionRequest, ErrorResponse
 from src.engine.engine import Engine
 from src.logger import setup_logging
@@ -35,6 +35,13 @@ def create_model_config(args: argparse.Namespace) -> ModelConfig:
 def create_cache_config(args: argparse.Namespace) -> CacheConfig:
     """Create the CacheConfig from the parsed command-line arguments. """
     return CacheConfig(block_size=args.block_size, swap_space=args.swap_space)
+
+def create_scheduler_config(args: argparse.Namespace) -> SchedulerConfig:
+    """Create the SchedulerConfig from the parsed command-line arguments. """
+    return SchedulerConfig(
+        max_num_batched_tokens=args.max_num_batched_tokens,
+        max_num_seqs=args.max_num_seqs,
+    )
 
 @app.get("/v1/models")
 async def get_available_models():
@@ -65,6 +72,8 @@ if __name__ == "__main__":
     parser.add_argument('--download-dir', type=str, help='directory to download and load the weights.') 
     parser.add_argument('--local-dir', type=str, help='local directory to load the weights.') 
     parser.add_argument('--use-np-weights', action='store_true', help='save a numpy copy of model weights for faster loading. This can increase the disk usage by up to 2x.')
+    parser.add_argument("--max-num-batched-tokens", type=int, default=2048, help="maximum number of tokens processed in a single iteration")
+    parser.add_argument("--max-num-seqs", type=int, default=256, help="maximum number of sequences processed in a single iteration")
     args = parser.parse_args()
     app.add_middleware(
         CORSMiddleware,
@@ -74,6 +83,11 @@ if __name__ == "__main__":
     )
     model_config = create_model_config(args)
     cache_config = create_cache_config(args)
-    engine       = Engine(model_config=model_config, cache_config=cache_config)
+    scheduler_config = create_scheduler_config(args)
+    engine = Engine(
+        model_config=model_config,
+        cache_config=cache_config,
+        scheduler_config=scheduler_config,
+    )
     uvicorn.run(app=app, host=args.host, port=args.port, log_level="info", log_config=None, timeout_keep_alive=10)
 

@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from typing import Any, Dict, List
 from transformers import Qwen2Config
-from defs import KVCache
+from src.defs import KVCache
 from src.model_executor.layers.attention import PagedAttentionWithRoPE
 from src.model_executor.layers.sampler import Sampler
 from src.model_executor.layers.norm import RMSNorm
@@ -36,9 +36,9 @@ class Qwen2DecoderLayer(nn.Module):
     def __init__(self, config: Qwen2Config):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.atten = Qwen2Attention(hidden_size=self.hidden_size, num_heads=config.num_attention_heads) 
+        self.self_attn = Qwen2Attention(hidden_size=self.hidden_size, num_heads=config.num_attention_heads) 
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.atten_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -51,7 +51,7 @@ class Qwen2DecoderLayer(nn.Module):
 class Qwen2Model(nn.Module):
 
     def __init__(self, config:Qwen2Config) -> None:
-        super().__init__(config)
+        super().__init__()
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
@@ -75,7 +75,7 @@ class Qwen2Model(nn.Module):
 class Qwen2ForCausalLM(nn.Module):
     
     def __init__(self, config) -> None:
-        super().__init__(config)
+        super().__init__()
         self.model = Qwen2Model(config)
         self.samper = Sampler(config.vocab_size)
 

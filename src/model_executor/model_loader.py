@@ -14,7 +14,7 @@ from src.config import ModelConfig
 from src.model_executor.models.qwen2 import Qwen2ForCausalLM
 
 _MODEL_REGISTRY_LIST = {
-    "qwen25": Qwen2ForCausalLM,
+    "Qwen2ForCausalLM": Qwen2ForCausalLM,
 }
 
 _WEIGHT_FILE_PATTERNS = [

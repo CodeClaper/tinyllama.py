@@ -1,10 +1,8 @@
-
 import torch
 
 from src.config import ModelConfig, SchedulerConfig
-from src.model.model_loader import load_model
+from src.model_executor.model_loader import load_model
 from src.sampler_params import SamplerParams
-
 
 class Worker:
     """A worker class that executes the model on a device."""

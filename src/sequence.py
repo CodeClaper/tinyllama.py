@@ -21,6 +21,9 @@ class SequenceData:
         self.output_token_ids: List[int] = []
         self.cumulative_logprob = 0.0
 
+    def get_token_ids(self) -> List[int]:
+        return self.prompt_token_ids + self.output_token_ids
+
 
 class Sequence:
 
@@ -36,7 +39,6 @@ class Sequence:
         self.data = SequenceData(prompt_token_ids)
         self.block_size = block_size
         self.status = SequenceStatus.WAITING
-
 
 class SequenceGroup:
 
@@ -62,7 +64,7 @@ class SequenceGroupMetadata:
         is_prompt: bool,
         seq_data: Dict[int, SequenceData],
         sampling_params: SamplerParams,
-        block_tables: Dict[int, List[int]] # Seq id -> list of physical block number.
+        block_tables: Dict[int, List[int]] | None # Seq id -> list of physical block number.
     ) -> None:
         self.reqeust_id = reqeust_id
         self.is_prompt = is_prompt

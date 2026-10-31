@@ -1,5 +1,5 @@
 import enum
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from src.sampler_params import SamplerParams
 
@@ -30,7 +30,7 @@ class Sequence:
     def __init__(
         self,
         seq_id: int,
-        prompt: str,
+        prompt: Optional[str],
         prompt_token_ids: List[int],
         block_size: int,
     ) -> None:

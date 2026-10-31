@@ -5,7 +5,8 @@ from src.config import CacheConfig, ModelConfig, SchedulerConfig
 from src.model_executor.model_loader import load_hf_tokenizer
 from src.sampler_params import SamplerParams
 from src.worker.worker import Worker
-
+from src.utils import Counter
+from src.sequence import Sequence, SequenceGroup
 
 class Engine:
     """An engine that receives requests and generates texts."""
@@ -21,6 +22,7 @@ class Engine:
         self.scheduler_config = scheduler_config
         self.workers: List[Worker] = []
         self.tokenizer = load_hf_tokenizer(self.model_config.model)
+        self.counter = Counter()
         self._init_workers()
         self._init_cache()
 
@@ -52,5 +54,14 @@ class Engine:
         if arrival_time is None:
             arrival_time = time.time()
         if prompt_token_ids is None:
-            prompt_token_ids = []
+            assert prompt is not None
+            prompt_token_ids = self.tokenizer.encode(prompt)
+        
+        block_size = self.cache_config.block_size
+        seqs: List[Sequence] = []
+        for _ in range(sampling_params.best_of):
+            seq_id = next(self.counter)
+            seq = Sequence(seq_id, prompt, prompt_token_ids, block_size)
+            seqs.append(seq)
 
+        seq_group = SequenceGroup(request_id, seqs, sampling_params, arrival_time)

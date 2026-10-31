@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from huggingface_hub import snapshot_download
 from torch import nn
-from transformers import PretrainedConfig
+from transformers import AutoTokenizer, PretrainedConfig, PreTrainedTokenizerBase
 
 from src.config import ModelConfig
 from src.model_executor.models.qwen2 import Qwen2ForCausalLM
@@ -122,3 +122,22 @@ def load_hf_weights(
     else:
         yield from _iter_hf_state_dict(weight_files, weight_format)
 
+
+def load_hf_tokenizer(model_name: str) -> PreTrainedTokenizerBase:
+    """Gets a tokenizer for the given model name via Huggingface."""
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+            trust_remote_code=True,
+            use_fast=True,
+            padding_side="left",
+            truncation_side="left",
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load tokenizer for model {model_name!r}."
+        ) from e
+
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    return tokenizer

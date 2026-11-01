@@ -25,6 +25,14 @@ class SequenceData:
     def get_token_ids(self) -> List[int]:
         return self.prompt_token_ids + self.output_token_ids
 
+    def append_token_id(
+        self, 
+        token_id: int, 
+        logprob: float
+    ) -> None:
+        self.output_token_ids.append(token_id)
+        self.cumulative_logprob += logprob
+
 
 class Sequence:
 
@@ -41,6 +49,9 @@ class Sequence:
         self.block_size = block_size
         self.status = SequenceStatus.WAITING
         self.logic_token_blocks: List[LogicTokenBlock] = []
+        self.output_logprobs: List[Dict[int, float]] = []
+        self.output_tokens: List[str] = []
+        self.output_text = ""
 
     def _append_logical_block(self) -> None:
         block = LogicTokenBlock(
@@ -64,6 +75,17 @@ class Sequence:
             num_empty_slots = last_block.get_num_empty_slots()
             last_block.append_tokens(token_ids[:num_empty_slots])
             token_ids = token_ids[num_empty_slots:]
+
+    def append_token_id(
+        self,
+        token_id: int,
+        logprob: Dict[int, float],
+    ) -> None:
+        assert token_id in logprob
+        self._append_token_to_blocks([token_id])
+        self.output_logprobs.append(logprob)
+        self.data.append_token_id(token_id, logprob=logprob[token_id])
+
 
 class SequenceGroup:
 

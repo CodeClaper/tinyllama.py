@@ -2,8 +2,31 @@
 from torch import Device
 
 
-class PhysicalTokenBlock:
+class LogicTokenBlock:
 
+    """ 
+    A block that stores a contiguous chunk of tokens from left to right.
+
+    A logic block is used to represent the states of the corresponding 
+    physical block in th kvcache.
+    """
+
+    def __init__(
+        self,
+        block_id,
+        block_size,
+    ) -> None:
+        self.block_id = block_id
+        self.block_size = block_size
+        self.num_tokens = 0
+
+
+    def is_empty(self) -> bool:
+        return self.num_tokens == 0
+
+
+class PhysicalTokenBlock:
+    """ Represents the state of a block in kvcache. """
     def __init__(
         self,
         device: Device,

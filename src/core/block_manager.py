@@ -1,9 +1,12 @@
 
 from torch import Device
-from typing import List
-from src.core import block
+from typing import List, Dict
 from src.core.block import PhysicalTokenBlock
+from src.sequence import SequenceGroup
 
+
+# Mapping: logical block number -> physical block.
+BlockTable = List[PhysicalTokenBlock]
 
 class BlockAllocator:
     """
@@ -41,7 +44,9 @@ class BlockAllocator:
         block.ref_count -= 1
         if block.ref_count == 0:
             self.free_list.append(block)
-
+    
+    def get_num_free_blocks(self) -> int:
+        return len(self.free_list)
 
 class BlockSpaceManager:
     
@@ -58,3 +63,10 @@ class BlockSpaceManager:
         self.watermark = watermark
         assert self.watermark > 0
         self.watermark_blocks = int(watermark * num_gpu_block)
+        self.block_tabls :Dict[int, BlockTable] = {}
+
+    def can_allocate(
+        self, 
+        seq_group: SequenceGroup
+    ) -> bool:
+        return True

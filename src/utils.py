@@ -1,4 +1,9 @@
+import enum
 import uuid
+
+class Device(enum.Enum):
+    GPU = enum.auto()
+    CPU = enum.auto()
 
 class Counter:
     def __init__(self, start: int = 0) -> None:

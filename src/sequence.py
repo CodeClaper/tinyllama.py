@@ -1,6 +1,7 @@
 import enum
 from typing import Dict, List, Optional
 
+from src.core.block import LogicTokenBlock, PhysicalTokenBlock
 from src.sampler_params import SamplerParams
 
 
@@ -39,6 +40,30 @@ class Sequence:
         self.data = SequenceData(prompt_token_ids)
         self.block_size = block_size
         self.status = SequenceStatus.WAITING
+        self.logic_token_blocks: List[LogicTokenBlock] = []
+
+    def _append_logical_block(self) -> None:
+        block = LogicTokenBlock(
+            block_id=len(self.logic_token_blocks),
+            block_size=self.block_size
+        )
+        self.logic_token_blocks.append(block)
+
+    def _append_token_to_blocks(
+        self,
+        token_ids: List[int],
+    ) -> None:
+        while token_ids: 
+            if not self.logic_token_blocks:
+                self._append_logical_block()
+
+            last_block = self.logic_token_blocks[-1]
+            if last_block.is_full():
+                self._append_logical_block()
+                last_block = self.logic_token_blocks[-1]
+            num_empty_slots = last_block.get_num_empty_slots()
+            last_block.append_tokens(token_ids[:num_empty_slots])
+            token_ids = token_ids[num_empty_slots:]
 
 class SequenceGroup:
 
@@ -53,7 +78,6 @@ class SequenceGroup:
         self.seqs = seqs
         self.sampling_params = sampling_params
         self.arrival_time = arrival_time
-
 
 
 class SequenceGroupMetadata:

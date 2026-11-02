@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Set, Tuple
 from src.config import CacheConfig
 from src.utils import Device
 from src.core.block import PhysicalTokenBlock
@@ -66,7 +66,7 @@ class BlockSpaceManager:
 
     def can_allocate(
         self, 
-        seq_group: SequenceGroup
+        seq_group: SequenceGroup,
     ) -> bool:
         seqs = seq_group.get_seqs()
         # Here we assume that all sequences in the group are the same prompt.
@@ -129,4 +129,64 @@ class BlockSpaceManager:
             block_table[-1] = new_block
             self.gpu_allocator.free(last_block)
             return last_block.block_id, new_block.block_id
+    
+    def _free_block_table(self, block_table: BlockTable) -> None:
+        for block in block_table:
+            match block.device:
+                case Device.GPU:
+                    self.gpu_allocator.free(block)
+                case Device.CPU:
+                    self.cpu_allocator.free(block)
+                case _:
+                    assert False, 'Invalid device type.'
+
+    def free(self, seq: Sequence) -> None:
+        if seq.seq_id not in self.block_tables:
+            return
+        block_table = self.block_tables[seq.seq_id]
+        self._free_block_table(block_table)
+        del self.block_tables[seq.seq_id]
+
+    def _get_physical_blocks(self, seq_group: SequenceGroup) -> List[PhysicalTokenBlock]:
+        blocks: Set[PhysicalTokenBlock] = set()
+        for seq in seq_group.get_seqs():
+            if seq.is_finished():
+                continue
+            block_table = self.block_tables[seq.seq_id]
+            for block in block_table:
+                blocks.add(block)
+        return list(blocks)
+
+    def can_swap_in(self, seq_group: SequenceGroup) -> bool:
+        blocks = self._get_physical_blocks(seq_group)
+        num_swapped_seqs = seq_group.get_num_seqs(status=SequenceStatus.SWAPPED)
+        num_free_blocks = self.gpu_allocator.get_num_free_blocks()
+        num_required_blocks = len(blocks) + num_swapped_seqs
+        return num_free_blocks - num_required_blocks >= self.watermark_blocks
+
+
+    def swap_in(self, seq_group: SequenceGroup) -> Dict[int, int]:
+        # CPU block -> GPU block.
+        mapping: Dict[PhysicalTokenBlock, PhysicalTokenBlock] = {}
+        for seq in seq_group.get_seqs():
+            if seq.is_finished():
+                continue
+            new_block_table: BlockTable = []
+            block_table = self.block_tables[seq.seq_id]
+            for cpu_block in block_table:
+                if cpu_block in mapping:
+                    gpu_block = mapping[cpu_block]
+                    gpu_block.ref_count += 1
+                else:
+                    gpu_block = self.gpu_allocator.allocate()
+                    mapping[cpu_block] = gpu_block
+                new_block_table.append(gpu_block)
+                self.cpu_allocator.free(cpu_block)
+            self.block_tables[seq.seq_id] = new_block_table
+
+        block_number_mapping = {
+            cpu_block.block_id: gpu_block.block_id
+            for cpu_block, gpu_block in mapping.items()
+        }
+        return block_number_mapping
 

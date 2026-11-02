@@ -10,6 +10,12 @@ class SequenceStatus(enum.Enum):
     RUNNING  = enum.auto()
     SWAPPED  = enum.auto()
     FINISHED = enum.auto()
+    
+    @staticmethod
+    def is_finished(status: "SequenceStatus") -> bool:
+        return status in [
+            SequenceStatus.FINISHED
+        ]
 
 
 class SequenceData:
@@ -85,6 +91,9 @@ class Sequence:
         self._append_token_to_blocks([token_id])
         self.output_logprobs.append(logprob)
         self.data.append_token_id(token_id, logprob=logprob[token_id])
+
+    def is_finished(self) -> bool:
+        return SequenceStatus.is_finished(self.status)
 
 
 class SequenceGroup:

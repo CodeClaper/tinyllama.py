@@ -50,7 +50,6 @@ class PhysicalTokenBlock:
         self.block_size = block_size
         self.ref_count = 0
 
-
     def __repr__(self) -> str:
         return (f'PhysicalTokenBlock(device={self.device},  '
                 f'block_id={self.block_id}, '

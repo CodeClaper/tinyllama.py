@@ -1,6 +1,7 @@
 
 from torch import Device
 from typing import List, Dict
+from src.config import CacheConfig
 from src.core.block import PhysicalTokenBlock
 from src.sequence import SequenceGroup
 
@@ -52,17 +53,13 @@ class BlockSpaceManager:
     
     def __init__(
         self,
-        block_size: int,
-        num_gpu_block: int,
-        num_cpu_block: int,
+        cache_config: CacheConfig,
         watermark: float = 0.01,
     ) -> None:
-        self.block_size = block_size
-        self.num_gpu_block = num_gpu_block
-        self.num_cpu_block = num_cpu_block
+        self.cache_config = cache_config
         self.watermark = watermark
         assert self.watermark > 0
-        self.watermark_blocks = int(watermark * num_gpu_block)
+        self.watermark_blocks = int(watermark * self.cache_config.num_gpu_blocks)
         self.block_tabls :Dict[int, BlockTable] = {}
 
     def can_allocate(

@@ -2,6 +2,7 @@ import time
 
 from typing import List, Optional
 from src.config import CacheConfig, ModelConfig, SchedulerConfig
+from src.core.scheduler import Scheduler
 from src.model_executor.model_loader import load_hf_tokenizer
 from src.sampler_params import SamplerParams
 from src.worker.worker import Worker
@@ -22,6 +23,7 @@ class Engine:
         self.scheduler_config = scheduler_config
         self.workers: List[Worker] = []
         self.tokenizer = load_hf_tokenizer(self.model_config.model)
+        self.schduler = Scheduler(scheduler_config, cache_config)
         self.counter = Counter()
         self._init_workers()
         self._init_cache()
@@ -34,7 +36,6 @@ class Engine:
 
     def _init_cache(self) -> None:
         """Profiles the memory usage and intializes the KV cache."""
-
     
     def add_request(
         self,
@@ -65,3 +66,12 @@ class Engine:
             seqs.append(seq)
 
         seq_group = SequenceGroup(request_id, seqs, sampling_params, arrival_time)
+        self.schduler.add_seq_group(seq_group)
+    
+    def step(self) -> None:
+        """
+        Performs one decoding iteration and return newly generted result.
+        """
+
+
+

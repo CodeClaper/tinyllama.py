@@ -27,7 +27,3 @@ class Scheduler:
         self.waiting.append(seq_group)
 
 
-    def schedule(self) -> None:
-
-        for seq_group in self.running:
-            is_prompt = seq_group.reqeust_id in 

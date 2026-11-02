@@ -1,7 +1,7 @@
 import enum
-from typing import Dict, List, Optional
 
-from src.core.block import LogicTokenBlock, PhysicalTokenBlock
+from typing import Dict, List, Optional
+from src.core.block import LogicTokenBlock
 from src.sampler_params import SamplerParams
 
 
@@ -101,6 +101,20 @@ class SequenceGroup:
         self.sampling_params = sampling_params
         self.arrival_time = arrival_time
 
+    def get_seqs(
+        self, 
+        status: Optional[SequenceStatus] = None,
+    ) -> List[Sequence]:
+        if status is None:
+            return self.seqs
+        else:
+            return [seq for seq in self.seqs if seq.status == status]
+
+    def get_num_seqs(
+        self,
+        status: Optional[SequenceStatus] = None,
+    ) -> int:
+        return len(self.get_seqs(status))
 
 class SequenceGroupMetadata:
 

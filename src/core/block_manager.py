@@ -1,7 +1,6 @@
-
-from torch import Device
 from typing import List, Dict
 from src.config import CacheConfig
+from src.utils import Device
 from src.core.block import PhysicalTokenBlock
 from src.sequence import SequenceGroup
 
@@ -60,10 +59,38 @@ class BlockSpaceManager:
         self.watermark = watermark
         assert self.watermark > 0
         self.watermark_blocks = int(watermark * self.cache_config.num_gpu_blocks)
+        self.gpu_allocator = BlockAllocator(Device.GPU, block_size=self.cache_config.block_size, num_blocks=self.cache_config.num_gpu_blocks)
+        self.cpu_allocator = BlockAllocator(Device.CPU, block_size=self.cache_config.block_size, num_blocks=self.cache_config.num_cpu_blocks)
+        # Mapping: seq_id -> BlockTable.
         self.block_tabls :Dict[int, BlockTable] = {}
 
     def can_allocate(
         self, 
         seq_group: SequenceGroup
     ) -> bool:
-        return True
+        seqs = seq_group.get_seqs()
+        # Here we assume that all sequences in the group are the same prompt.
+        seq = seqs[0]
+        num_required_blocks = len(seq.logic_token_blocks)
+        num_free_gpu_blocks = self.gpu_allocator.get_num_free_blocks()
+        return num_free_gpu_blocks - num_required_blocks >= self.watermark_blocks
+
+
+    def allocate(
+        self, 
+        seq_group: SequenceGroup,
+    ) -> None:
+        seqs = seq_group.get_seqs()
+        # Here we assume that all sequences in the group are the same prompt.
+        seq = seqs[0]
+
+        block_table: BlockTable = []
+        for _ in range(len(seq.logic_token_blocks)):
+            block = self.gpu_allocator.allocate()
+            block.ref_count = seq_group.get_num_seqs()
+            block_table.append(block)
+
+        for seq in seq_group.get_seqs():
+            self.block_tabls[seq.seq_id] = block_table.copy()
+
+

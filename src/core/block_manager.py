@@ -1,8 +1,8 @@
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
 from src.config import CacheConfig
 from src.utils import Device
 from src.core.block import PhysicalTokenBlock
-from src.sequence import SequenceGroup
+from src.sequence import Sequence, SequenceGroup, SequenceStatus
 
 
 # Mapping: logical block number -> physical block.
@@ -62,7 +62,7 @@ class BlockSpaceManager:
         self.gpu_allocator = BlockAllocator(Device.GPU, block_size=self.cache_config.block_size, num_blocks=self.cache_config.num_gpu_blocks)
         self.cpu_allocator = BlockAllocator(Device.CPU, block_size=self.cache_config.block_size, num_blocks=self.cache_config.num_cpu_blocks)
         # Mapping: seq_id -> BlockTable.
-        self.block_tabls :Dict[int, BlockTable] = {}
+        self.block_tables :Dict[int, BlockTable] = {}
 
     def can_allocate(
         self, 
@@ -91,6 +91,42 @@ class BlockSpaceManager:
             block_table.append(block)
 
         for seq in seq_group.get_seqs():
-            self.block_tabls[seq.seq_id] = block_table.copy()
+            self.block_tables[seq.seq_id] = block_table.copy()
 
+    def can_append_slot(
+        self, 
+        seq_group: SequenceGroup,
+    ) -> bool:
+        num_free_gpu_blocks = self.gpu_allocator.get_num_free_blocks()
+        num_seqs = seq_group.get_num_seqs(SequenceStatus.RUNNING)
+        return num_free_gpu_blocks - num_seqs >= 0
+
+    def append_slot(
+        self, 
+        seq: Sequence,
+    ) -> Optional[Tuple[int, int]]:
+        """Allocate a physical slot for a new token."""
+        logical_blocks = seq.logic_token_blocks
+        block_table = self.block_tables[seq.seq_id]
+
+        if len(block_table) < len(logical_blocks):
+            # The sequence has a new logical block.
+            # Allocate a new physical block.
+            block = self.gpu_allocator.allocate()
+            block_table.append(block)
+            return None
+
+        # We want to append the token to the last physical block.
+        last_block = block_table[-1]
+        assert last_block.device == Device.GPU
+        if last_block.ref_count == 1:
+            # Not shared with other sequences. Appendable.
+            return None
+        else:
+            # The last block is shared with other sequences.
+            # Copy on Write: Allocate a new block and copy the tokens.
+            new_block = self.gpu_allocator.allocate()
+            block_table[-1] = new_block
+            self.gpu_allocator.free(last_block)
+            return last_block.block_id, new_block.block_id
 

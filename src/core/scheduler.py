@@ -102,9 +102,26 @@ class Scheduler:
         self.swapped.append(seq_group)
 
 
+    def _swap_in(
+        self,
+        seq_group: SequenceGroup,
+        blocks_to_swap_in: Dict[int, int],
+    ) -> None:
+        if not self.block_manager.can_swap_in(seq_group):
+            raise RuntimeError("Aborted due to the laock of GPU swap sapce. Please increase the swap spaces to avoid this error.")
+        mapping = self.block_manager.swap_in(seq_group)
+        blocks_to_swap_in.update(mapping)
+        for seq in seq_group.get_seqs(status=SequenceStatus.SWAPPED):
+            seq.status = SequenceStatus.RUNNING
+
     def _swap_out(
         self, 
         seq_group: SequenceGroup,
-        blocks_to_swap_out: Dict[int, int]
+        blocks_to_swap_out: Dict[int, int],
     ) -> None:
-        pass
+        if not self.block_manager.can_swap_out(seq_group):
+            raise RuntimeError("Aborted due to the laock of CPU swap sapce. Please increase the swap spaces to avoid this error.")
+        mapping = self.block_manager.swap_out(seq_group)
+        blocks_to_swap_out.update(mapping)
+        for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
+            seq.status = SequenceStatus.SWAPPED

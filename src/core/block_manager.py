@@ -190,3 +190,33 @@ class BlockSpaceManager:
         }
         return block_number_mapping
 
+
+    def can_swap_out(self, seq_group: SequenceGroup) -> bool:
+        blocks = self._get_physical_blocks(seq_group)
+        num_free_blocks = self.cpu_allocator.get_num_free_blocks()
+        return num_free_blocks >= len(blocks)
+
+    def swap_out(self, seq_group: SequenceGroup) -> Dict[int, int]:
+        # GPU block -> CPU block
+        mapping: Dict[PhysicalTokenBlock, PhysicalTokenBlock] = {}
+        for seq in seq_group.get_seqs():
+            if seq.is_finished():
+                continue
+            new_block_table: BlockTable = []
+            block_table = self.block_tables[seq.seq_id]
+            for gpu_block in block_table:
+                if gpu_block in mapping:
+                    cpu_block = mapping[gpu_block]
+                    cpu_block.ref_count += 1
+                else:
+                    cpu_block = self.cpu_allocator.allocate()
+                    mapping[gpu_block] = cpu_block
+                new_block_table.append(cpu_block)
+                self.cpu_allocator.free(gpu_block)
+            self.block_tables[seq.seq_id] = new_block_table
+
+        block_number_mapping = {
+            gpu_block.block_id: cpu_block.block_id
+            for cpu_block, gpu_block in mapping.items()
+        }
+        return block_number_mapping

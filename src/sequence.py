@@ -28,9 +28,6 @@ class SequenceData:
         self.output_token_ids: List[int] = []
         self.cumulative_logprob = 0.0
 
-    def get_token_ids(self) -> List[int]:
-        return self.prompt_token_ids + self.output_token_ids
-
     def append_token_id(
         self, 
         token_id: int, 
@@ -39,6 +36,11 @@ class SequenceData:
         self.output_token_ids.append(token_id)
         self.cumulative_logprob += logprob
 
+    def get_token_ids(self) -> List[int]:
+        return self.prompt_token_ids + self.output_token_ids
+    
+    def get_len(self) -> int:
+        return len(self.prompt_token_ids) + len(self.output_token_ids)
 
 class Sequence:
 
@@ -91,6 +93,9 @@ class Sequence:
         self._append_token_to_blocks([token_id])
         self.output_logprobs.append(logprob)
         self.data.append_token_id(token_id, logprob=logprob[token_id])
+
+    def get_len(self) -> int:
+        return self.data.get_len()
 
     def is_finished(self) -> bool:
         return SequenceStatus.is_finished(self.status)

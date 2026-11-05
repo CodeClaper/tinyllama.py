@@ -64,6 +64,15 @@ class BlockSpaceManager:
         # Mapping: seq_id -> BlockTable.
         self.block_tables :Dict[int, BlockTable] = {}
 
+    def get_num_free_blocks(self, device: Device) -> int:
+        match device:
+            case Device.GPU:
+                return self.gpu_allocator.get_num_free_blocks()
+            case Device.CPU:
+                return self.cpu_allocator.get_num_free_blocks()
+            case _:
+                assert False, 'Invalid device type.'
+
     def can_allocate(
         self, 
         seq_group: SequenceGroup,
@@ -116,6 +125,7 @@ class BlockSpaceManager:
             block_table.append(block)
             return None
 
+        assert len(block_table) == len(logical_blocks)
         # We want to append the token to the last physical block.
         last_block = block_table[-1]
         assert last_block.device == Device.GPU

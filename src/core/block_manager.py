@@ -73,6 +73,10 @@ class BlockSpaceManager:
             case _:
                 assert False, 'Invalid device type.'
 
+    def get_block_table(self, seq: Sequence) -> List[int]:
+        block_table = self.block_tables[seq.seq_id]
+        return [block.block_id for block in block_table]
+
     def can_allocate(
         self, 
         seq_group: SequenceGroup,

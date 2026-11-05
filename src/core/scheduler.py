@@ -5,7 +5,7 @@ from typing import List, Dict, Optional, Tuple
 from src.config import CacheConfig, SchedulerConfig
 from src.core.block_manager import BlockSpaceManager
 from src.core.policy import PolicyFactory
-from src.sequence import SequenceGroup, SequenceStatus
+from src.sequence import SequenceData, SequenceGroup, SequenceGroupMetadata, SequenceStatus
 from src.utils import Device, PreemptionMode
 
 _LOGGING_INTERVAL_SECOND = 5
@@ -87,6 +87,10 @@ class Scheduler:
 
         # Swap in the sequence group in the SWAPPED state if possible.
         self.swapped = self.policy.sort_by_priority(now, self.swapped)
+        num_cur_seqs = sum(
+            seq_group.get_num_seqs(status=SequenceStatus.RUNNING)
+            for seq_group in self.running
+        )
         while self.swapped and not blocks_to_swap_out:
             seq_group = self.swapped[0]
             if seq_group in preempted:
@@ -94,15 +98,17 @@ class Scheduler:
             if not self.block_manager.can_swap_in(seq_group):
                 break
 
-            num_new_reqs = seq_group.get_num_seqs(status=SequenceStatus.SWAPPED)
-            num_cur_seqs = len(self.running)
-            if num_cur_seqs + num_new_reqs > self.scheduler_config.max_num_seqs:
+            # The total number of sequences in the RUNNING state should not
+            # exceed the maximum number of sequences.
+            num_new_seqs = seq_group.get_num_seqs(status=SequenceStatus.SWAPPED)
+            if num_cur_seqs + num_new_seqs > self.scheduler_config.max_num_seqs:
                 break
             
             seq_group = self.swapped.pop(0)
             self._swap_in(seq_group, blocks_to_swap_in)
             self._append_slot(seq_group, blocks_to_copy)
             self.running.append(seq_group)
+            num_cur_seqs += num_new_seqs
             
         num_batched_tokens = sum(
             seq_group.get_num_seqs(status=SequenceStatus.RUNNING)
@@ -122,15 +128,15 @@ class Scheduler:
                 num_prompt_tokens = first_seq.get_len()
                 if num_batched_tokens + num_prompt_tokens > self.scheduler_config.max_num_batched_tokens:
                     break
-                num_new_reqs = seq_group.get_num_seqs(status=SequenceStatus.WAITING)
-                num_cur_seqs = len(self.running)
-                if num_cur_seqs + num_new_reqs > self.scheduler_config.max_num_batched_tokens:
+                num_new_seqs = seq_group.get_num_seqs(status=SequenceStatus.WAITING)
+                if num_cur_seqs + num_new_seqs > self.scheduler_config.max_num_seqs:
                     break
 
                 seq_group = self.waiting.pop(0)
                 self._allocate(seq_group)
                 self.running.append(seq_group)
                 num_batched_tokens += num_prompt_tokens
+                num_cur_seqs += num_new_seqs
                 prompt_group_ids.append(seq_group.reqeust_id)
         
         scheduler_result = SchedulerResult(
@@ -167,7 +173,7 @@ class Scheduler:
             total_num_cpu_blocks = self.cache_config.num_cpu_blocks
             if total_num_cpu_blocks > 0:
                 num_free_cpu_blocks = self.block_manager.get_num_free_blocks(Device.CPU)
-                num_used_cpu_blocks = total_num_cpu_blocks - num_free_gpu_blocks
+                num_used_cpu_blocks = total_num_cpu_blocks - num_free_cpu_blocks
                 cpu_cache_usage     = num_used_cpu_blocks / total_num_cpu_blocks
             else: 
                 cpu_cache_usage     = 0.0
@@ -181,6 +187,31 @@ class Scheduler:
                 f"CPU KV cache usage: { cpu_cache_usage * 100:.1f}%")
         
         return scheduler_result, prompt_group_ids
+
+    def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerResult]:
+        """ Sechdule sequence groups. """
+        scheduler_result, prompt_group_ids = self._schedule()
+        seq_group_metadata_list: List[SequenceGroupMetadata] = []
+
+        for seq_group in self.running:
+            is_prompt = seq_group.reqeust_id in prompt_group_ids
+            seq_data: Dict[int, SequenceData] = {}
+            block_tables: Dict[int, List[int]] = {}
+            for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
+                seq_id = seq.seq_id
+                seq_data[seq_id] = seq.data
+                block_tables[seq_id] = self.block_manager.get_block_table(seq)
+
+            seq_group_metadata = SequenceGroupMetadata(
+                reqeust_id=seq_group.reqeust_id,
+                is_prompt=is_prompt,
+                seq_data=seq_data,
+                sampling_params=seq_group.sampling_params,
+                block_tables=block_tables,
+            )
+            seq_group_metadata_list.append(seq_group_metadata)
+
+        return (seq_group_metadata_list, scheduler_result)
 
 
     def _allocate(

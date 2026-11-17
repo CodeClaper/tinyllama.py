@@ -143,6 +143,15 @@ class BlockSpaceManager:
             block_table[-1] = new_block
             self.gpu_allocator.free(last_block)
             return last_block.block_id, new_block.block_id
+
+    def fork(self, parent_seq: Sequence, child_seq: Sequence) -> None:
+        # NOTE: fork does not allocate a new physical block.
+        # Thus, it is always safe from OOM.
+        src_block_table = self.block_tables[parent_seq.seq_id]
+        assert src_block_table, f"logic error, not found block_table by seq_id: {parent_seq.seq_id}"
+        self.block_tables[child_seq.seq_id] = src_block_table.copy()
+        for block in src_block_table:
+            block.ref_count += 1
     
     def _free_block_table(self, block_table: BlockTable) -> None:
         for block in block_table:

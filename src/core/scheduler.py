@@ -1,11 +1,11 @@
 import time
 
 from loguru import logger
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 from src.config import CacheConfig, SchedulerConfig
 from src.core.block_manager import BlockSpaceManager
 from src.core.policy import PolicyFactory
-from src.sequence import SequenceData, SequenceGroup, SequenceGroupMetadata, SequenceStatus
+from src.sequence import SequenceData, SequenceGroup, SequenceGroupMetadata, SequenceOutputs, SequenceStatus
 from src.utils import Device, PreemptionMode
 
 _LOGGING_INTERVAL_SECOND = 5
@@ -212,6 +212,30 @@ class Scheduler:
             seq_group_metadata_list.append(seq_group_metadata)
 
         return (seq_group_metadata_list, scheduler_result)
+
+    def update(self, seq_ouputs: Dict[int, SequenceOutputs]) -> List[SequenceGroup]:
+        """ Update the running sequences and free blocks. """
+        for seq_group in self.running:
+            # Process beam search results before processing the new tokens.
+            for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
+                ouput = seq_ouputs[seq.seq_id]
+                if seq.seq_id != ouput.parent_seq_id:
+                    # The sequence is a fork of the parent sequence (beam search).
+                    # Free the current sequence.
+                    self.block_manager.free(seq=seq)
+                    # Fork the parent sequence.
+                    parent_seq = seq_group.find(ouput.parent_seq_id)
+                    parent_seq.fork(seq)
+                    self.block_manager.fork(parent_seq, seq)
+
+            # Process the new tokens.
+            for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
+                output = seq_ouputs[seq.seq_id]
+                seq.append_token_id(output.output_token, output.logprobs)
+        
+        # Return a shallow copy of the running queue to prevent the queue
+        # from being modified by the caller.
+        return self.running.copy()
 
 
     def _allocate(

@@ -4,6 +4,29 @@ from loguru import logger
 from transformers import AutoConfig, PretrainedConfig
 
 
+def get_head_size(hf_config: PretrainedConfig) -> int:
+    """Return the attention head size for a HuggingFace config."""
+    text_config = getattr(hf_config, "text_config", hf_config)
+
+    # Some models (e.g. Qwen3) set head_dim explicitly, and it is not
+    # necessarily equal to hidden_size // num_attention_heads.
+    head_dim = getattr(text_config, "head_dim", None)
+    if head_dim is not None:
+        return head_dim
+
+    hidden_size = getattr(text_config, "hidden_size", None)
+    if hidden_size is None:
+        hidden_size = text_config.d_model  # encoder-decoder configs
+
+    num_heads = text_config.num_attention_heads
+    if hidden_size % num_heads != 0:
+        raise ValueError(
+            f"hidden_size ({hidden_size}) is not divisible by "
+            f"num_attention_heads ({num_heads})"
+        )
+    return hidden_size // num_heads
+
+
 class ModelConfig:
     """Configuration for the model."""
 
@@ -43,25 +66,7 @@ class ModelConfig:
 
     def get_head_size(self) -> int:
         """Return the attention head size for a HuggingFace config."""
-        text_config = getattr(self.hf_config, "text_config", self.hf_config)
-
-        # Some models (e.g. Qwen3) set head_dim explicitly, and it is not
-        # necessarily equal to hidden_size // num_attention_heads.
-        head_dim = getattr(text_config, "head_dim", None)
-        if head_dim is not None:
-            return head_dim
-
-        hidden_size = getattr(text_config, "hidden_size", None)
-        if hidden_size is None:
-            hidden_size = text_config.d_model  # encoder-decoder configs
-
-        num_heads = text_config.num_attention_heads
-        if hidden_size % num_heads != 0:
-            raise ValueError(
-                f"hidden_size ({hidden_size}) is not divisible by "
-                f"num_attention_heads ({num_heads})"
-            )
-        return hidden_size // num_heads
+        return get_head_size(self.hf_config)
     
     def get_num_layers(self) -> int:
         """Return the number of layers for a HuggingFace config."""
@@ -95,6 +100,17 @@ class ModelConfig:
             "Cannot determine the number of attention heads from the "
             f"HuggingFace config of type {type(text_config).__name__}."
         )
+
+    def get_num_kv_heads(self) -> int:
+        """Return the number of key/value heads for a HuggingFace config."""
+        text_config = getattr(self.hf_config, "text_config", self.hf_config)
+
+        num_kv_heads = getattr(text_config, "num_key_value_heads", None)
+        if num_kv_heads is not None:
+            return num_kv_heads
+
+        # Multi-head attention: one key/value head per query head.
+        return self.get_num_heads()
 
 class CacheConfig:
     """Configuration for cache."""

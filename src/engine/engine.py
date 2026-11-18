@@ -32,12 +32,25 @@ class Engine:
     
     def _init_workers(self) -> None:
         """Initialize the workers and their configuration. """
-        worker = Worker(self.model_config, self.scheduler_config)
+        worker = Worker(
+            cache_config=self.cache_config,
+            model_config=self.model_config,
+            schduler_config=self.scheduler_config,
+        )
         self.workers.append(worker)
 
     def _init_cache(self) -> None:
         """Profiles the memory usage and intializes the KV cache."""
-    
+        # Memory profiling is not implemented yet. Once the available block
+        # counts are known, the KV cache can be allocated here.
+        if (
+            self.cache_config.num_gpu_blocks <= 0
+            or self.cache_config.num_cpu_blocks <= 0
+        ):
+            return
+        for worker in self.workers:
+            worker.cache_engine.initialize()
+
     def add_request(
         self,
         request_id: str,
@@ -138,7 +151,6 @@ class Engine:
             assert first == other
         return first
 
-
     def _decode_sequences(self, seq_groups: List[SequenceGroup]) -> None:
         """Decode the sequence outputs."""
         for seq_group in seq_groups:
@@ -146,7 +158,7 @@ class Engine:
                 new_token, new_output_text = detokenize_incrementally(
                     tokenizer=self.tokenizer,
                     prev_output_tokens=seq.output_tokens,
-                    new_token_id=0,
+                    new_token_id=seq.get_last_token_id(),
                     skip_special_tokens=True,
                 )
                 if new_token is None:

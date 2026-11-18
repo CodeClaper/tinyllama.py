@@ -1,31 +1,41 @@
 import torch
+import random
+import numpy as np
 
-from typing import List, Tuple
-from src.config import ModelConfig, SchedulerConfig
+from typing import Dict, List, Tuple
+
+from torch.cuda import is_available
+from src.config import CacheConfig, ModelConfig, SchedulerConfig
+from src.core.cache_engine import CacheEgnine
 from src.model_executor.model_loader import load_model
 from src.sampler_params import SamplerParams
-from src.sequence import SequenceData, SequenceGroupMetadata
+from src.sequence import SequenceData, SequenceGroupMetadata, SequenceOutputs
+from src.utils import Device
 
 class Worker:
     """A worker class that executes the model on a device."""
 
     def __init__(
         self,
+        cache_config: CacheConfig,
         model_config: ModelConfig,
         schduler_config: SchedulerConfig,
     ) -> None:
         self.model_config = model_config
         self.schduler_config = schduler_config
         self.model = load_model(self.model_config)
-        self.gpu_cache = None
+        self.cache_engine = CacheEgnine(
+            cache_config=cache_config,
+            model_config=model_config,
+        )
 
     @torch.inference_mode()
     def profile_num_available_blocks(
         self,
         block_size: int,
-        gpu_memory_utilization: float,
-        cpu_swap_space: int
-    ) -> tuple[int, int]:
+        cpu_swap_space: int,
+        gpu_memory_utilization: float = 0.9,
+    ) -> Tuple[int, int]:
         """
         Profile the memory usage of the model and get the maxium number of cache
         blocks than can be allocated with the remaining free memory.
@@ -48,8 +58,28 @@ class Worker:
                 block_tables=None,
             )
             seqs.append(seq)
-        self._prepare_inputs(seqs)
-        return 1, 2
+        input_tokens, input_postions = self._prepare_inputs(seqs)
+        num_layers = self.model_config.get_num_layers()
+        self.model(
+            input_ids=input_tokens,
+            positions=input_postions,
+            kv_caches=[(None, None)] * num_layers,
+        )
+
+        # Calculate the number of blocks that can be allocated with 
+        # the profiled peak memory.
+        torch.cuda.synchronize()
+        peak_memory = torch.cuda.max_memory_allocated()
+        total_gpu_memory = torch.cuda.get_device_properties(0).total_memory
+        cache_block_size = self.cache_engine.calculate_cache_block_size(block_size)
+        assert total_gpu_memory * gpu_memory_utilization - peak_memory >= 0, "Not enough GPU memory to run the engine."
+        num_gpu_blocks = int((total_gpu_memory * gpu_memory_utilization - peak_memory) // cache_block_size)
+        num_cpu_blocks = int(cpu_swap_space // cache_block_size)
+        
+        # Reset the seed to ensure that the random state is not
+        # affected by the model initialization and profiling.
+        self.set_random_seed(0)
+        return num_gpu_blocks, num_cpu_blocks
 
 
     def _prepare_inputs(
@@ -79,16 +109,31 @@ class Worker:
 
         return input_tensor, position_tensor
 
-
+    
+    @torch.inference_mode()
     def execute_model(
         self, 
-        seqs: List[SequenceGroupMetadata]
-    ):
-        input_tensor, position_tensor = self._prepare_inputs(seqs)
+        seq_group_metadata_list: List[SequenceGroupMetadata],
+        blocks_to_swap_in: Dict[int, int],
+        blocks_to_swap_out: Dict[int, int],
+        blocks_to_swap_copy: Dict[int, int],
+    ) -> Dict[int, SequenceOutputs]:
+        # Handle caceh operatrions.
+        issued_cache_op = False
+
+        input_tensor, position_tensor = self._prepare_inputs(seq_group_metadata_list)
+        kv_caches = self.cache_engine.get_kv_cache(Device.GPU)
         return self.model(
             input_ids=input_tensor,
             positions=position_tensor,
-            kv_caches=self.gpu_cache,
+            kv_caches=kv_caches,
         )
 
+
+    def set_random_seed(self, seed: int) -> None:
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
 

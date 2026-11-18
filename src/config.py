@@ -41,6 +41,28 @@ class ModelConfig:
         )
         self.dtype = _get_and_verify_dtype(self.hf_config, dtype)
 
+    def get_head_size(self) -> int:
+        """Return the attention head size for a HuggingFace config."""
+        text_config = getattr(self.hf_config, "text_config", self.hf_config)
+
+        # Some models (e.g. Qwen3) set head_dim explicitly, and it is not
+        # necessarily equal to hidden_size // num_attention_heads.
+        head_dim = getattr(text_config, "head_dim", None)
+        if head_dim is not None:
+            return head_dim
+
+        hidden_size = getattr(text_config, "hidden_size", None)
+        if hidden_size is None:
+            hidden_size = text_config.d_model  # encoder-decoder configs
+
+        num_heads = text_config.num_attention_heads
+        if hidden_size % num_heads != 0:
+            raise ValueError(
+                f"hidden_size ({hidden_size}) is not divisible by "
+                f"num_attention_heads ({num_heads})"
+            )
+        return hidden_size // num_heads
+
 
 class CacheConfig:
     """Configuration for cache."""

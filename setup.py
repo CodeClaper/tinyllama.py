@@ -15,6 +15,17 @@ setup(
             },
         ),
         CUDAExtension(
+            name="cscr.cache",
+            sources=[
+                "cscr/cache.cpp",
+                "cscr/cache_kernel.cu",
+            ],
+            extra_compile_args={
+                "cxx": ["-O3"],
+                "nvcc": ["-O3", "--use_fast_math"],
+            },
+        ),
+        CUDAExtension(
             name="cscr.pos_encoding",
             sources=[
                 "cscr/pos_encoding.cpp",

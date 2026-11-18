@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 import torch
 from pydantic import BaseModel, Field
 
+from src.sequence import SequenceGroup, SequenceStatus
 from src.utils import random_uuid
 
 KVCache = tuple[torch.Tensor, torch.Tensor]
@@ -72,6 +73,47 @@ class RequestOutput:
         self.prompt = prompt
         self.prompt_token_ids = prompt_token_ids
         self.outputs = outputs
+
+    @classmethod
+    def from_seq_group(cls, seq_group: SequenceGroup) -> "RequestOutput":
+        # Get the top-n sequences.
+        n = seq_group.sampling_params.n
+        seqs = seq_group.get_seqs()
+        assert n <= len(seqs)
+        sorted_seqs = sorted(
+            seqs, 
+            key=lambda seq: seq.get_cumulative_logprob(), 
+            reverse=True
+        )
+        top_n_seqs = sorted_seqs[:n]
+
+        # Create the outputs.
+        outputs: List[CompletionOuput] = []
+        for seq in top_n_seqs:
+            logprobs = seq.output_tokens
+            if seq_group.sampling_params is None:
+                # NOTE: We need to take care of this case because the sequence
+                # always has the logprobs of the sampled tokens even if the 
+                # logprobs are not requested.
+                logprobs = {}
+            finished_reason = SequenceStatus.get_finished_reason(seq.status)
+            output = CompletionOuput(
+                index=seqs.index(seq),
+                text=seq.output_text,
+                token_ids=seq.get_output_token_ids(),
+                cumulative_logprob=seq.get_cumulative_logprob(),
+                logprobs=logprobs,
+                finish_reason=finished_reason
+            )
+            outputs.append(output)
+
+        # Every sequence in the sequence group should have the same prompt.
+        prompt = top_n_seqs[0].prompt
+        prompt_token_ids = top_n_seqs[0].data.prompt_token_ids
+        return cls(seq_group.reqeust_id, prompt, prompt_token_ids, outputs)
+
+
+
 
     def __repr__(self) -> str:
         return (f"RequestOutput(request_id={self.request_id}, "

@@ -7,16 +7,33 @@ from src.sampler_params import SamplerParams
 
 
 class SequenceStatus(enum.Enum):
-    WAITING  = enum.auto()
-    RUNNING  = enum.auto()
-    SWAPPED  = enum.auto()
-    FINISHED = enum.auto()
+    WAITING = enum.auto()
+    RUNNING = enum.auto()
+    SWAPPED = enum.auto()
+    FINISHED_STOPPED = enum.auto()
+    FINISHED_LENGTH_CAPPED = enum.auto()
+    FINISHED_ABORTED = enum.auto()
     
     @staticmethod
     def is_finished(status: "SequenceStatus") -> bool:
         return status in [
-            SequenceStatus.FINISHED
+            SequenceStatus.FINISHED_STOPPED,
+            SequenceStatus.FINISHED_LENGTH_CAPPED,
+            SequenceStatus.FINISHED_ABORTED,
         ]
+    
+    @staticmethod
+    def get_finished_reason(status: "SequenceStatus") -> Optional[str]:
+        match status:
+            case SequenceStatus.FINISHED_STOPPED:
+                finish_reason = "stop"
+            case SequenceStatus.FINISHED_LENGTH_CAPPED:
+                finish_reason = "length"
+            case SequenceStatus.FINISHED_ABORTED:
+                finish_reason = "abort"
+            case _:
+                finish_reason = None
+        return finish_reason
 
 
 class SequenceData:
@@ -43,12 +60,21 @@ class SequenceData:
     def get_len(self) -> int:
         return len(self.prompt_token_ids) + len(self.output_token_ids)
 
+    def get_output_len(self) -> int:
+        return len(self.output_token_ids)
+
+    def get_last_token_id(self) -> int:
+        if not self.output_token_ids:
+            return self.prompt_token_ids[-1]
+        return self.output_token_ids[-1]
+
+
 class Sequence:
 
     def __init__(
         self,
         seq_id: int,
-        prompt: Optional[str],
+        prompt: str,
         prompt_token_ids: List[int],
         block_size: int,
     ) -> None:
@@ -98,6 +124,18 @@ class Sequence:
     def get_len(self) -> int:
         return self.data.get_len()
 
+    def get_output_len(self) -> int:
+        return self.data.get_output_len()
+
+    def get_last_token_id(self) -> int:
+        return self.data.get_last_token_id()
+
+    def get_output_token_ids(self) -> List[int]:
+        return self.data.output_token_ids
+
+    def get_cumulative_logprob(self) -> float:
+        return self.data.cumulative_logprob
+
     def is_finished(self) -> bool:
         return SequenceStatus.is_finished(self.status)
     
@@ -145,6 +183,9 @@ class SequenceGroup:
             if seq.seq_id == seq_id:
                 return seq
         raise ValueError(f"Sequence {seq_id} not found.")
+
+    def is_finished(self) -> bool:
+        return all(seq.is_finished() for seq in self.seqs)
 
 class SequenceGroupMetadata:
 

@@ -4,7 +4,7 @@ from typing import Any, List, Optional
 from src.config import CacheConfig, ModelConfig, SchedulerConfig
 from src.core.scheduler import Scheduler
 from src.defs import RequestOutput
-from src.model_executor.model_loader import load_hf_tokenizer
+from src.model_executor.model_loader import detokenize_incrementally, load_hf_tokenizer
 from src.sampler_params import SamplerParams
 from src.worker.worker import Worker
 from src.utils import Counter
@@ -97,7 +97,21 @@ class Engine:
         # Update the schduler with the mode outputs.
         seq_groups = self.schduler.update(output)
 
-        return []
+        # Decode the sequences.
+        self._decode_sequences(seq_groups)
+
+        # Stop the sequence that meets the stopping criteria.
+        self._stop_sequences(seq_groups)
+
+        # Free the finished sequence groups.
+        self.schduler.free_finished_seq_groups()
+
+        # Create the outpus.
+        request_outputs: List[RequestOutput] = []
+        for seq_group in seq_groups:
+            request_output = RequestOutput.from_seq_group(seq_group)
+            request_outputs.append(request_output)
+        return request_outputs
 
 
     def _run_worker(
@@ -129,5 +143,43 @@ class Engine:
         """Decode the sequence outputs."""
         for seq_group in seq_groups:
             for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
-                pass
+                new_token, new_output_text = detokenize_incrementally(
+                    tokenizer=self.tokenizer,
+                    prev_output_tokens=seq.output_tokens,
+                    new_token_id=0,
+                    skip_special_tokens=True,
+                )
+                if new_token is None:
+                    continue
+                seq.output_tokens.append(new_token)
+                seq.output_text = new_output_text
+    
+    def _stop_sequences(self, seq_groups: List[SequenceGroup]) -> None:
+        """Stop the finish sequences."""
+        for seq_group in seq_groups:
+            sampling_params = seq_group.sampling_params
+            for seq in seq_group.get_seqs(status=SequenceStatus.RUNNING):
+                # Check if the sequence has generated a stop string.
+                stopped = False
+                for stop_str in sampling_params.stop:
+                    if seq.output_text.endswith(stop_str):
+                        # Truncate the output text so that the stop string is
+                        # no included in the output.
+                        seq.output_text = seq.output_text[:-len(stop_str)]
+                        self.schduler.free_seq(seq, SequenceStatus.FINISHED_STOPPED)
+                        stopped = True
+                        break
+                if stopped:
+                    continue
+
+                # Check if the sequence has reached max_tokens.
+                if seq.get_output_len() == sampling_params.max_tokens:
+                    self.schduler.free_seq(seq, SequenceStatus.FINISHED_LENGTH_CAPPED)
+                    continue
+
+                #Check if the sequence has generated the EOS token.
+                if not sampling_params.ignore_eos:
+                    if seq.get_last_token_id() == self.tokenizer.eos_token_id:
+                        self.schduler.free_seq(seq, SequenceStatus.FINISHED_STOPPED)
+                        continue
 

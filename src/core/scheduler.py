@@ -2,10 +2,11 @@ import time
 
 from loguru import logger
 from typing import Any, List, Dict, Optional, Tuple
+
 from src.config import CacheConfig, SchedulerConfig
 from src.core.block_manager import BlockSpaceManager
 from src.core.policy import PolicyFactory
-from src.sequence import SequenceData, SequenceGroup, SequenceGroupMetadata, SequenceOutputs, SequenceStatus
+from src.sequence import Sequence, SequenceData, SequenceGroup, SequenceGroupMetadata, SequenceOutputs, SequenceStatus
 from src.utils import Device, PreemptionMode
 
 _LOGGING_INTERVAL_SECOND = 5
@@ -236,7 +237,17 @@ class Scheduler:
         # Return a shallow copy of the running queue to prevent the queue
         # from being modified by the caller.
         return self.running.copy()
+    
+    def free_seq(self, seq: Sequence, finish_status: SequenceStatus) -> None:
+        seq.status = finish_status
+        self.block_manager.free(seq)
 
+    def free_finished_seq_groups(self) -> None:
+        running = [
+            seq_group for seq_group in self.running 
+            if not seq_group.is_finished()
+        ]
+        self.running = running
 
     def _allocate(
         self,

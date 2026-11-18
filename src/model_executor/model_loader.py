@@ -2,13 +2,14 @@ import glob
 import json
 import os
 from collections.abc import Generator
+from typing import Tuple, Union, List, Optional
 
 import filelock
 import numpy as np
 import torch
 from huggingface_hub import snapshot_download
 from torch import nn
-from transformers import AutoTokenizer, PretrainedConfig, PreTrainedTokenizerBase
+from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast, PretrainedConfig, PreTrainedTokenizerBase
 
 from src.config import ModelConfig
 from src.model_executor.models.qwen2 import Qwen2ForCausalLM
@@ -141,3 +142,61 @@ def load_hf_tokenizer(model_name: str) -> PreTrainedTokenizerBase:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
+
+
+def detokenize_incrementally(
+    tokenizer: Union[PreTrainedTokenizerBase, PreTrainedTokenizerFast],
+    prev_output_tokens: List[str],
+    new_token_id: int,
+    skip_special_tokens: bool,
+) -> Tuple[Optional[str], str]:
+    """
+    Detokenizes the new token in conjunction with the previous output tokens.
+
+    NOTE: this function does not update the prev_output_tokens.
+
+    Returns:
+        new_token: The new token as string, or None if it should be skipped.
+        output_text: The new output text as a string.
+    """
+    if skip_special_tokens and (new_token_id in tokenizer.all_special_ids):
+        return None, ""
+    new_token = tokenizer.convert_ids_to_tokens(
+        ids=new_token_id,
+        skip_special_tokens=skip_special_tokens
+    )
+    # `convert_ids_to_tokens` is typed as `str | list[str]`; passing a single
+    # int always returns a single token, so narrow the type here.
+    assert isinstance(new_token, str)
+    output_tokens = prev_output_tokens + [new_token]
+
+    # `added_tokens_encoder` is only exposed by concrete tokenizer
+    # implementations (e.g. PreTrainedTokenizerFast), not by the
+    # PreTrainedTokenizerBase type, so look it up dynamically.
+    added_tokens_encoder = getattr(tokenizer, "added_tokens_encoder", {})
+
+    # Convert the tokens to a string.
+    # Optimization: If the tokenizer does not have `added_tokens_encoder`,
+    # then we can directly use `convert_tokens_to_string`.
+    if not added_tokens_encoder:
+        output_text = tokenizer.convert_tokens_to_string(output_tokens)
+        return new_token, output_text
+
+    sub_texts = []
+    current_sub_text = []
+    for token in output_tokens:
+        if skip_special_tokens and token in tokenizer.all_special_tokens:
+            continue
+        if token in added_tokens_encoder:
+            if current_sub_text:
+                sub_text = tokenizer.convert_tokens_to_string(current_sub_text)
+                sub_texts.append(sub_text)
+                current_sub_text = []
+            sub_texts.append(token)
+        else:
+            current_sub_text.append(token)
+    if current_sub_text:
+        sub_text = tokenizer.convert_tokens_to_string(current_sub_text)
+        sub_texts.append(sub_text)
+    output_text = " ".join(sub_texts)
+    return (new_token, output_text)

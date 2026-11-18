@@ -62,7 +62,39 @@ class ModelConfig:
                 f"num_attention_heads ({num_heads})"
             )
         return hidden_size // num_heads
+    
+    def get_num_layers(self) -> int:
+        """Return the number of layers for a HuggingFace config."""
+        text_config = getattr(self.hf_config, "text_config", self.hf_config)
 
+        for attr in (
+            "num_hidden_layers",
+            "num_decoder_layers",
+            "num_layers",
+            "n_layer",
+        ):
+            num_layers = getattr(text_config, attr, None)
+            if num_layers is not None:
+                return num_layers
+
+        raise AttributeError(
+            "Cannot determine the number of layers from the HuggingFace "
+            f"config of type {type(text_config).__name__}."
+        )
+
+    def get_num_heads(self) -> int:
+        """Return the number of attention heads for a HuggingFace config."""
+        text_config = getattr(self.hf_config, "text_config", self.hf_config)
+
+        for attr in ("num_attention_heads", "n_head"):
+            num_heads = getattr(text_config, attr, None)
+            if num_heads is not None:
+                return num_heads
+
+        raise AttributeError(
+            "Cannot determine the number of attention heads from the "
+            f"HuggingFace config of type {type(text_config).__name__}."
+        )
 
 class CacheConfig:
     """Configuration for cache."""

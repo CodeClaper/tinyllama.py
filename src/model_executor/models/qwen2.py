@@ -3,6 +3,7 @@ import torch.nn as nn
 
 from typing import Any, Dict, List
 from transformers import Qwen2Config
+from src.config import get_head_size
 from src.defs import KVCache
 from src.model_executor.layers.attention import PagedAttentionWithRoPE
 from src.model_executor.layers.sampler import Sampler
@@ -12,15 +13,23 @@ class Qwen2Attention(nn.Module):
 
     def __init__(
         self, 
-        hidden_size:int, 
-        num_heads: int
+        hidden_size: int, 
+        num_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
     ):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_heads = num_heads
-        self.head_dim = hidden_size // self.num_heads
+        self.num_kv_heads = num_kv_heads
+        self.head_dim = head_dim
         self.scaling = self.head_dim ** -0.5
-        self.attn = PagedAttentionWithRoPE(num_heads==self.num_heads, head_size=self.head_dim, scale=self.scaling, rotary_dim=self.head_dim)
+        self.attn = PagedAttentionWithRoPE(
+            num_heads=num_heads,
+            head_size=self.head_dim,
+            scale=self.scaling,
+            rotary_dim=self.head_dim,
+        )
     
     def forwad(
         self,
@@ -36,7 +45,14 @@ class Qwen2DecoderLayer(nn.Module):
     def __init__(self, config: Qwen2Config):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = Qwen2Attention(hidden_size=self.hidden_size, num_heads=config.num_attention_heads) 
+        self.self_attn = Qwen2Attention(
+            hidden_size=self.hidden_size,
+            num_heads=config.num_attention_heads,
+            num_kv_heads=getattr(
+                config, "num_key_value_heads", config.num_attention_heads
+            ),
+            head_dim=get_head_size(config),
+        )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

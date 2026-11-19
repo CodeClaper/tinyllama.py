@@ -10,9 +10,10 @@ class Sampler(nn.Module):
         self.vocab_size = vocab_size
 
     
-    def forwad(
+    def forward(
         self,
         embedding: torch.Tensor,
-        hidden_stats: torch.Tensor,
+        hidden_states: torch.Tensor,
     ):
+        # TODO: implement token sampling once model forward is complete.
         pass

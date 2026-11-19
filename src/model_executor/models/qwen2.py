@@ -31,7 +31,7 @@ class Qwen2Attention(nn.Module):
             rotary_dim=self.head_dim,
         )
     
-    def forwad(
+    def forward(
         self,
         positions: torch.Tensor,
         hidden_states: torch.Tensor,
@@ -93,7 +93,7 @@ class Qwen2ForCausalLM(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         self.model = Qwen2Model(config)
-        self.samper = Sampler(config.vocab_size)
+        self.sampler = Sampler(config.vocab_size)
 
     def forward(
         self, 
@@ -102,8 +102,9 @@ class Qwen2ForCausalLM(nn.Module):
         kv_caches: List[KVCache],
     ) -> Dict[int, Any]:
         hidden_states = self.model(input_ids, positions, kv_caches)
-        next_tokens = self.samper()
-        return {}
+        # Sampling is not part of the model forward pass. The engine/worker
+        # will sample from the hidden states once generation is implemented.
+        return hidden_states
 
     def load_weights(
         self, 

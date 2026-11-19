@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 // Copy KV cache blocks from `src` to `dst`.
 //
@@ -25,4 +26,21 @@ void swap_blocks_launch(
     torch::Tensor& src,
     torch::Tensor& dst,
     const std::unordered_map<int64_t, int64_t>& block_mapping,
+    c10::cuda::CUDAStream stream);
+
+// Copy KV cache blocks in place: each `src` block is copied to one or more
+// `dst` blocks of the same tensor.
+//
+// `key_caches` and `value_caches` hold one tensor per layer using the layouts
+// described above. All tensors must live on the same GPU and a single block
+// must have the same size across layers.
+//
+// `block_mapping` maps `src` block index -> list of `dst` block indices.
+//
+// The copies are issued asynchronously on `stream`; the caller is responsible
+// for synchronizing the stream before using the result.
+void copy_blocks_launch(
+    std::vector<torch::Tensor>& key_caches,
+    std::vector<torch::Tensor>& value_caches,
+    const std::unordered_map<int64_t, std::vector<int64_t>>& block_mapping,
     c10::cuda::CUDAStream stream);

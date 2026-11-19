@@ -1,11 +1,10 @@
-from typing import List, Tuple
-
 import torch
-from torch._C import dtype
+
+from typing import Dict, List, Tuple
 from src.config import CacheConfig, ModelConfig
 from src.defs import KVCache
 from src.utils import Device
-
+from cscr import cache as _Cache
 
 class CacheEgnine:
     """
@@ -37,6 +36,10 @@ class CacheEgnine:
         # of available blocks has been profiled.
         self.gpu_cache: List[KVCache] = []
         self.cpu_cache: List[KVCache] = []
+
+        #initialize the stream for caching operations.
+        self.cache_stream = torch.cuda.Stream()
+        assert self.cache_stream != torch.cuda.current_stream()
 
     def initialize(self) -> None:
         """Allocate the GPU and CPU KV caches.
@@ -110,4 +113,15 @@ class CacheEgnine:
         total = self.num_layers * (key_cache_block + value_cache_block)
         element_size = torch.tensor([], dtype=self.dtype).element_size()
         return total * element_size
-        
+    
+    def _swap(self, src: List[KVCache], dst: List[KVCache], src_to_dst: Dict[int, int]) -> None:
+        with torch.cuda.stream(self.cache_stream):
+            for i in range(self.num_layers):
+                src_key_cache, src_value_cache = src[i]
+                dst_key_cache, dst_value_cache = dst[i]
+                # Copy the key blocks.
+                _Cache.swap_blocks(src_key_cache, dst_key_cache, src_to_dst)
+                # Copy the value blocks.
+                _Cache.swap_blocks(src_value_cache, dst_value_cache, src_to_dst)
+
+

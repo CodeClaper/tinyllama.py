@@ -1,6 +1,8 @@
 import time
 
 from typing import Any, List, Optional
+
+from loguru import logger
 from src.config import CacheConfig, ModelConfig, SchedulerConfig
 from src.core.scheduler import Scheduler
 from src.defs import RequestOutput
@@ -29,7 +31,6 @@ class Engine:
         self._init_workers()
         self._init_cache()
 
-    
     def _init_workers(self) -> None:
         """Initialize the workers and their configuration. """
         worker = Worker(
@@ -43,11 +44,23 @@ class Engine:
         """Profiles the memory usage and intializes the KV cache."""
         # Memory profiling is not implemented yet. Once the available block
         # counts are known, the KV cache can be allocated here.
-        if (
-            self.cache_config.num_gpu_blocks <= 0
-            or self.cache_config.num_cpu_blocks <= 0
-        ):
-            return
+        num_blocks = self._run_worker(
+            "profile_num_available_blocks",
+            if_all_ouputs=True,
+            block_size=self.cache_config.block_size,
+            cpu_swap_space=self.cache_config.swap_space_bytes,
+            gpu_memory_utilization=self.cache_config.gpu_memory_utilization
+        )
+
+        # Since we use a shared centralized controller, we take the minium
+        # number of blocks across all workers to make sure all the memory
+        # operators can be applied to all workers.
+        num_gpu_blocks = min(b[0] for b in num_blocks)
+        num_cpu_blocks = min(b[1] for b in num_blocks)
+        logger.info(f'# GPU blocks: {num_gpu_blocks}, '
+                    f'# CPU blocks: {num_cpu_blocks}')
+        self.cache_config.num_gpu_blocks = num_gpu_blocks
+        self.cache_config.num_cpu_blocks = num_cpu_blocks
         for worker in self.workers:
             worker.cache_engine.initialize()
 

@@ -33,7 +33,7 @@ class Worker:
         self,
         block_size: int,
         cpu_swap_space: int,
-        gpu_memory_utilization: float = 0.9,
+        gpu_memory_utilization: float,
     ) -> Tuple[int, int]:
         """
         Profile the memory usage of the model and get the maxium number of cache
@@ -51,7 +51,7 @@ class Worker:
             seq_data = SequenceData(prompt_token_ids=[0] * seq_len)
             seq = SequenceGroupMetadata(
                 reqeust_id=str(group_id),
-                is_prompt=False,
+                is_prompt=True,
                 seq_data={group_id: seq_data},
                 sampling_params=sample_params,
                 block_tables=None,
@@ -144,7 +144,8 @@ class Worker:
                 context_len = seq_data.get_len()
                 position = context_len - 1
                 input_postions.append(position)
-
+                
+                assert seq_group_metadata.block_tables is not None
                 block_table = seq_group_metadata.block_tables[seq_id]
                 generation_block_tables.append(block_table)
 
@@ -198,7 +199,6 @@ class Worker:
             kv_caches=kv_caches,
         )
         return output
-
 
     def set_random_seed(self, seed: int) -> None:
         random.seed(seed)

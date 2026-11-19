@@ -34,7 +34,11 @@ def create_model_config(args: argparse.Namespace) -> ModelConfig:
 
 def create_cache_config(args: argparse.Namespace) -> CacheConfig:
     """Create the CacheConfig from the parsed command-line arguments. """
-    return CacheConfig(block_size=args.block_size, swap_space=args.swap_space)
+    return CacheConfig(
+        block_size=args.block_size, 
+        swap_space=args.swap_space,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+    )
 
 def create_scheduler_config(args: argparse.Namespace) -> SchedulerConfig:
     """Create the SchedulerConfig from the parsed command-line arguments. """
@@ -69,6 +73,7 @@ if __name__ == "__main__":
     parser.add_argument("--dtype",      type=str, default="auto", choices=['auto', 'half', 'bfloat16', 'float'], help='data type for model weights and activations. '
                                                                                                                       'The "auto" option will use FP16 precision '
                                                                                                                       'for FP32 and FP16 models, and BF precision for BF16 models')
+    parser.add_argument("--gpu-memory-utilization", type=float, default=0.90, help="the percentage of CPU memory to be usedd for the model executor")
     parser.add_argument('--download-dir', type=str, help='directory to download and load the weights.') 
     parser.add_argument('--local-dir', type=str, help='local directory to load the weights.') 
     parser.add_argument('--use-np-weights', action='store_true', help='save a numpy copy of model weights for faster loading. This can increase the disk usage by up to 2x.')

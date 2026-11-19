@@ -195,7 +195,7 @@ class SequenceGroupMetadata:
         is_prompt: bool,
         seq_data: Dict[int, SequenceData],
         sampling_params: SamplerParams,
-        block_tables: Dict[int, List[int]] # Seq id -> list of physical block number.
+        block_tables: Optional[Dict[int, List[int]]] # Seq id -> list of physical block number.
     ) -> None:
         self.reqeust_id = reqeust_id
         self.is_prompt = is_prompt

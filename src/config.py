@@ -3,6 +3,7 @@ import torch
 from loguru import logger
 from transformers import AutoConfig, PretrainedConfig
 
+_Gib = 1 << 30
 
 def get_head_size(hf_config: PretrainedConfig) -> int:
     """Return the attention head size for a HuggingFace config."""
@@ -113,15 +114,24 @@ class ModelConfig:
         return self.get_num_heads()
 
 class CacheConfig:
-    """Configuration for cache."""
+    """
+    Configuration for cache.
+    
+    Args:
+        block_size: Size of a cache block in mumber of tokens.
+        swap_space: Size of the CPU swap space per GPU(in GiB).
+        gpu_memory_utilication: Fraction of GPU memory to use for the Engine execution.
+    """
 
     def __init__(
         self,
         block_size: int,
-        swap_space: int
+        swap_space: int,
+        gpu_memory_utilization: float,
     ) -> None:
-        self.block_size     = block_size
-        self.swap_space     = swap_space
+        self.block_size = block_size
+        self.gpu_memory_utilization = gpu_memory_utilization
+        self.swap_space_bytes = swap_space * _Gib
         self.num_gpu_blocks = 0
         self.num_cpu_blocks = 0
 

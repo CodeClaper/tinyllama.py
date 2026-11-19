@@ -3,8 +3,6 @@ import random
 import numpy as np
 
 from typing import Dict, List, Tuple
-
-from torch.cuda import is_available
 from src.config import CacheConfig, ModelConfig, SchedulerConfig
 from src.core.cache_engine import CacheEgnine
 from src.model_executor.model_loader import load_model
@@ -28,6 +26,7 @@ class Worker:
             cache_config=cache_config,
             model_config=model_config,
         )
+        self.block_size = cache_config.block_size
 
     @torch.inference_mode()
     def profile_num_available_blocks(
@@ -84,26 +83,85 @@ class Worker:
 
     def _prepare_inputs(
         self, 
-        seqs: List[SequenceGroupMetadata]
+        seq_group_metadata_list: List[SequenceGroupMetadata]
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         seq_groups: List[Tuple[List[int], SamplerParams]] = []
-        prompt_lens: List[int] = []
         input_tokens: List[int] = []
         input_postions: List[int] = []
-        for seq in seqs:
-            if not seq.is_prompt:
+        slot_mappings: List[int] = []
+
+        # Add prompt tokens.
+        prompt_lens: List[int] = []
+        for seq_group_metadata in seq_group_metadata_list:
+            if not seq_group_metadata.is_prompt:
                 continue
-            seq_ids = list(seq.seq_data.keys())
-            seq_groups.append((seq_ids, seq.sampling_params))
+            seq_ids = list(seq_group_metadata.seq_data.keys())
+            seq_groups.append((seq_ids, seq_group_metadata.sampling_params))
+            
+            # Use any sequence in the group.
             seq_id = seq_ids[0]
-            seq_data = seq.seq_data[seq_id]
+            seq_data = seq_group_metadata.seq_data[seq_id]
             prompt_tokens = seq_data.get_token_ids()
             prompt_len = len(prompt_tokens)
             prompt_lens.append(prompt_len)
 
             input_tokens.extend(prompt_tokens)
+            #NOTE: here we assume that the first token in the prompt
+            # is always the first token in the sequence.
             input_postions.extend(range(len(prompt_tokens)));
-        
+
+            if seq_group_metadata.block_tables is None:
+                # During memory profiling, the block table are not initialized
+                # yet. In this case, we just use a dummy slot mapping.
+                slot_mappings.extend([0] * prompt_len)
+                continue
+            
+            block_table = seq_group_metadata.block_tables[seq_id]
+            for i in range(prompt_len):
+                block_idx = block_table[i // self.block_size]
+                block_offset = i % self.block_size
+                slot = block_idx * self.block_size + block_offset
+                slot_mappings.append(slot)
+
+        # Add generation tokens.
+        max_context_len = 0
+        max_num_blocks_per_seq = 0
+        context_lens: List[int] = []
+        generation_block_tables: List[List[int]] = []
+        for seq_group_metadata in seq_group_metadata_list:
+            if seq_group_metadata.is_prompt:
+                continue
+
+            seq_ids = list(seq_group_metadata.seq_data.keys())
+            sampling_params = seq_group_metadata.sampling_params
+            seq_groups.append((seq_ids, sampling_params))
+
+            for seq_id in seq_ids:
+                seq_data = seq_group_metadata.seq_data[seq_id]
+                generation_token = seq_data.get_last_token_id()
+                input_tokens.append(generation_token)
+
+                context_len = seq_data.get_len()
+                position = context_len - 1
+                input_postions.append(position)
+
+                block_table = seq_group_metadata.block_tables[seq_id]
+                generation_block_tables.append(block_table)
+
+                max_context_len = max(max_context_len, context_len)
+                max_num_blocks_per_seq = max(max_num_blocks_per_seq, len(block_table))
+                context_lens.append(context_len)
+
+                block_idx = block_table[position // self.block_size]
+                block_offset = position % self.block_size
+                slot = block_idx * self.block_size + block_offset
+                slot_mappings.append(slot)
+
+        # Optimization: Pad the input length to be a alignment of 8.
+        # This is requried for utilizing the Tensor Cores in NVIDIA GPUs.
+        input_tokens = self._pad_to_aligment(input_tokens, alignment=8)
+        input_postions = self._pad_to_aligment(input_postions, alignment=8)
+
         input_tensor = torch.LongTensor(input_tokens)
         position_tensor = torch.LongTensor(input_postions)
 
@@ -116,18 +174,30 @@ class Worker:
         seq_group_metadata_list: List[SequenceGroupMetadata],
         blocks_to_swap_in: Dict[int, int],
         blocks_to_swap_out: Dict[int, int],
-        blocks_to_swap_copy: Dict[int, int],
+        blocks_to_copy: Dict[int, List[int]],
     ) -> Dict[int, SequenceOutputs]:
         # Handle caceh operatrions.
         issued_cache_op = False
+        if blocks_to_swap_in:
+            self.cache_engine.swap_in(blocks_to_swap_in)
+            issued_cache_op = True
+        if blocks_to_swap_out:
+            self.cache_engine.swap_out(blocks_to_swap_out)
+            issued_cache_op = True
+        if blocks_to_copy:
+            self.cache_engine.copy(blocks_to_copy)
+            issued_cache_op = True
 
         input_tensor, position_tensor = self._prepare_inputs(seq_group_metadata_list)
         kv_caches = self.cache_engine.get_kv_cache(Device.GPU)
-        return self.model(
+
+        # Execute the model.
+        output = self.model(
             input_ids=input_tensor,
             positions=position_tensor,
             kv_caches=kv_caches,
         )
+        return output
 
 
     def set_random_seed(self, seed: int) -> None:
@@ -136,4 +206,9 @@ class Worker:
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
+
+
+    def _pad_to_aligment(self, x: List[int], alignment: int) -> List[int]:
+        pad = ((-len(x)) % alignment)
+        return x + [0] * pad
 

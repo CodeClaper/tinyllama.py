@@ -113,6 +113,18 @@ class CacheEgnine:
         total = self.num_layers * (key_cache_block + value_cache_block)
         element_size = torch.tensor([], dtype=self.dtype).element_size()
         return total * element_size
+
+    def swap_in(self, src_to_dst: Dict[int, int]) -> None:
+        self._swap(self.cpu_cache, self.gpu_cache, src_to_dst)
+
+    def swap_out(self, src_to_dst: Dict[int, int]) -> None:
+        self._swap(self.gpu_cache, self.cpu_cache, src_to_dst)
+
+    def copy(self, src_to_dsts: Dict[int, List[int]]) -> None:
+        key_caches = [key_cache for key_cache, _ in self.gpu_cache]
+        value_caches = [value_cache for _, value_cache in self.gpu_cache]
+        # NOTE: this operation implicitly synchronizes the CPU and GPU.
+        _Cache.copy_blocks(key_caches, value_caches, src_to_dsts)
     
     def _swap(self, src: List[KVCache], dst: List[KVCache], src_to_dst: Dict[int, int]) -> None:
         with torch.cuda.stream(self.cache_stream):

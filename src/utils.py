@@ -1,7 +1,6 @@
 import enum
 import uuid
-
-from torch import torch
+import torch
 
 class Device(enum.Enum):
     GPU = enum.auto()

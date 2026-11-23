@@ -1,4 +1,5 @@
 import torch
+from torch._prims_common import Tensor
 import torch.nn as nn
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -41,9 +42,10 @@ class Qwen2Attention(nn.Module):
         self,
         positions: torch.Tensor,
         hidden_states: torch.Tensor,
-        kv_cache: KVCache
-    ):
-        pass
+        kv_cache: KVCache,
+        attn_metadata: AttentionMetadata,
+    ) -> torch.Tensor:
+        raise NotImplementedError
 
 
 class Qwen2DecoderLayer(nn.Module):
@@ -75,6 +77,13 @@ class Qwen2DecoderLayer(nn.Module):
             hidden_states = self.input_layernorm(hidden_states)
         else:
             hidden_states, residual = self.input_layernorm(hidden_states, residual)
+
+        hidden_states = self.self_attn(
+            positions=positions,
+            hidden_states=hidden_states,
+            kv_cache=kv_cache,
+            attn_metadata=attn_metadata
+        )
 
         return hidden_states, residual
 

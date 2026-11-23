@@ -44,3 +44,27 @@ void copy_blocks_launch(
     std::vector<torch::Tensor>& value_caches,
     const std::unordered_map<int64_t, std::vector<int64_t>>& block_mapping,
     c10::cuda::CUDAStream stream);
+
+// Write the key/value states of a batch of tokens into the paged KV cache.
+//
+// Layouts (contiguous):
+//   key          : [num_tokens, num_kv_heads, head_size]
+//   value        : [num_tokens, num_kv_heads, head_size]
+//   key_cache    : [num_blocks, num_kv_heads, head_size / x, block_size, x]
+//   value_cache  : [num_blocks, num_kv_heads, head_size, block_size]
+//   slot_mapping : [num_tokens]  (int32 or int64)
+//
+// `x` is the last dimension of `key_cache` (typically `16 / element_size`).
+// `slot_mapping[i]` is the flattened cache slot of token `i`; negative slots
+// mark padding tokens and are skipped.
+//
+// The cache tensors may use a different floating point dtype than `key` and
+// `value`; the values are converted while they are copied. The copies are
+// issued asynchronously on `stream`.
+void reshape_and_cache_launch(
+    torch::Tensor& key,
+    torch::Tensor& value,
+    torch::Tensor& key_cache,
+    torch::Tensor& value_cache,
+    torch::Tensor& slot_mapping,
+    c10::cuda::CUDAStream stream);

@@ -39,6 +39,63 @@ __global__ void copy_block_pairs_kernel(
     }
 }
 
+// Scatter the key/value states of `num_tokens` tokens into the paged cache.
+// One CUDA block handles one token; the threads of the block walk over the
+// `num_heads * head_size` elements of the token.
+//
+// The key cache stores `x` contiguous head elements per (block, head) pair,
+// so an element at head offset `d` lives at
+//   (d / x, block_offset, d % x)
+// inside the [head_size / x, block_size, x] slice of its head.
+template <typename scalar_t, typename cache_t, typename slot_t>
+__global__ void reshape_and_cache_kernel(
+    const scalar_t* __restrict__ key,
+    const scalar_t* __restrict__ value,
+    cache_t* __restrict__ key_cache,
+    cache_t* __restrict__ value_cache,
+    const slot_t* __restrict__ slot_mapping,
+    int64_t key_stride,
+    int64_t value_stride,
+    int num_heads,
+    int head_size,
+    int block_size,
+    int x)
+{
+    const int64_t token_idx = blockIdx.x;
+    const int64_t slot_idx = static_cast<int64_t>(slot_mapping[token_idx]);
+    if (slot_idx < 0) {
+        // Padding token that should not be written to the cache.
+        return;
+    }
+
+    const int64_t block_idx = slot_idx / block_size;
+    const int64_t block_offset = slot_idx % block_size;
+
+    const int64_t x_blocks = head_size / x;
+    const int num_elements = num_heads * head_size;
+
+    for (int i = threadIdx.x; i < num_elements; i += blockDim.x) {
+        const int head_idx = i / head_size;
+        const int head_offset = i % head_size;
+        const int x_idx = head_offset / x;
+        const int x_offset = head_offset % x;
+
+        const int64_t tgt_key_idx =
+            ((block_idx * num_heads + head_idx) * x_blocks + x_idx) *
+                block_size * x +
+            block_offset * x + x_offset;
+        const int64_t tgt_value_idx =
+            ((block_idx * num_heads + head_idx) * head_size + head_offset) *
+                block_size +
+            block_offset;
+
+        key_cache[tgt_key_idx] = static_cast<cache_t>(
+            key[token_idx * key_stride + i]);
+        value_cache[tgt_value_idx] = static_cast<cache_t>(
+            value[token_idx * value_stride + i]);
+    }
+}
+
 // Build a [num_pairs, 2] int64 tensor holding the (src, dst) block pairs.
 torch::Tensor make_block_mapping_tensor(
     const std::unordered_map<int64_t, int64_t>& block_mapping,
@@ -209,4 +266,59 @@ void copy_blocks_launch(
         launch_block_pairs(
             value_cache, value_cache, block_mapping_tensor, num_pairs, stream);
     }
+}
+
+void reshape_and_cache_launch(
+    torch::Tensor& key,
+    torch::Tensor& value,
+    torch::Tensor& key_cache,
+    torch::Tensor& value_cache,
+    torch::Tensor& slot_mapping,
+    c10::cuda::CUDAStream stream)
+{
+    const int num_tokens = static_cast<int>(slot_mapping.size(0));
+    if (num_tokens == 0) {
+        return;
+    }
+
+    const int num_heads = static_cast<int>(key.size(1));
+    const int head_size = static_cast<int>(key.size(2));
+    const int block_size = static_cast<int>(key_cache.size(3));
+    const int x = static_cast<int>(key_cache.size(4));
+
+    const int64_t key_stride = key.stride(0);
+    const int64_t value_stride = value.stride(0);
+
+    const dim3 grid(num_tokens);
+    const dim3 threads(std::min(num_heads * head_size, 512));
+
+    AT_DISPATCH_FLOATING_TYPES_AND2(
+        at::ScalarType::Half, at::ScalarType::BFloat16, key.scalar_type(),
+        "reshape_and_cache_kernel", [&] {
+            using key_scalar_t = scalar_t;
+            AT_DISPATCH_FLOATING_TYPES_AND2(
+                at::ScalarType::Half, at::ScalarType::BFloat16,
+                key_cache.scalar_type(), "reshape_and_cache_kernel", [&] {
+                    using cache_scalar_t = scalar_t;
+                    AT_DISPATCH_INDEX_TYPES(
+                        slot_mapping.scalar_type(),
+                        "reshape_and_cache_kernel", [&] {
+                            reshape_and_cache_kernel<
+                                key_scalar_t, cache_scalar_t, index_t>
+                                <<<grid, threads, 0, stream>>>(
+                                    key.data_ptr<key_scalar_t>(),
+                                    value.data_ptr<key_scalar_t>(),
+                                    key_cache.data_ptr<cache_scalar_t>(),
+                                    value_cache.data_ptr<cache_scalar_t>(),
+                                    slot_mapping.data_ptr<index_t>(),
+                                    key_stride,
+                                    value_stride,
+                                    num_heads,
+                                    head_size,
+                                    block_size,
+                                    x);
+                        });
+                });
+        });
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
 }

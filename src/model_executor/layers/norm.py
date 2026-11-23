@@ -1,10 +1,20 @@
 
 
+from typing import Optional
+
 import torch
 from torch import nn
 
+from cscr import norm as _C
+
 
 class RMSNorm(nn.Module):
+    """
+    Root mean square normalization.
+
+    Computes x -> w * x / sqrt(E[x^2] + eps) where w is the learned weight.
+    Refer to https://arxiv.org/abs/1910.07467
+    """
 
     def __init__(
         self,
@@ -19,8 +29,11 @@ class RMSNorm(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-    ) -> torch.Tensor:
-        out = torch.empty_like(x)
-        return out;
+        residual: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        if residual is not None:
+            _C.fused_add_rms_norm(x, residual, self.weight, self.eps)
+            return x, residual
+        return _C.rms_norm(x, self.weight, self.eps)
     
 

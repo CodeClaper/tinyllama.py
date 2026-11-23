@@ -1,6 +1,8 @@
 import enum
 import uuid
 
+from torch import torch
+
 class Device(enum.Enum):
     GPU = enum.auto()
     CPU = enum.auto()
@@ -32,3 +34,6 @@ class Counter:
 def random_uuid() -> str:
     """Returns random uuid str. """
     return str(uuid.uuid4().hex)
+
+def is_hip() -> bool:
+    return torch.version.hip is not None

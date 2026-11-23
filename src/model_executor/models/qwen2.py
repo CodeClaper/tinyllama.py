@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 from transformers import Qwen2Config
-from src.config import get_head_size
+from src.attention.backends.abstract import AttentionMetadata
+from src.attention.layer import Attention
 from src.defs import KVCache
-from src.model_executor.layers.attention import PagedAttentionWithRoPE
 from src.model_executor.layers.sampler import Sampler
 from src.model_executor.layers.norm import RMSNorm
 
@@ -16,19 +16,25 @@ class Qwen2Attention(nn.Module):
         hidden_size: int, 
         num_heads: int,
         num_kv_heads: int,
-        head_dim: int,
-    ):
+        max_position: int = 4096 * 32,
+        rope_theta: float = 10000.0,
+        use_sliding_window: bool = False,
+        sliding_window: Optional[int] = None,
+    ) -> None:
         super().__init__()
         self.hidden_size = hidden_size
         self.num_heads = num_heads
         self.num_kv_heads = num_kv_heads
-        self.head_dim = head_dim
+        self.head_dim = self.hidden_size // self.num_heads
         self.scaling = self.head_dim ** -0.5
-        self.attn = PagedAttentionWithRoPE(
+        self.max_position = max_position
+        self.sliding_window = sliding_window if use_sliding_window else None
+        self.attn = Attention(
             num_heads=num_heads,
             head_size=self.head_dim,
             scale=self.scaling,
-            rotary_dim=self.head_dim,
+            num_kv_heads=self.num_kv_heads,
+            sliding_window=self.sliding_window,
         )
     
     def forward(
@@ -51,7 +57,7 @@ class Qwen2DecoderLayer(nn.Module):
             num_kv_heads=getattr(
                 config, "num_key_value_heads", config.num_attention_heads
             ),
-            head_dim=get_head_size(config),
+            rope_theta=getattr(config, "rope_theta", 10000.0)
         )
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -60,9 +66,17 @@ class Qwen2DecoderLayer(nn.Module):
         self,
         positions: torch.Tensor,
         hidden_states: torch.Tensor,
-        kv_cache: KVCache
-    ):
-        pass
+        kv_cache: KVCache,
+        attn_metadata: AttentionMetadata,
+        residual: Optional[torch.Tensor],
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        if residual is None:
+            residual = hidden_states
+            hidden_states = self.input_layernorm(hidden_states)
+        else:
+            hidden_states, residual = self.input_layernorm(hidden_states, residual)
+
+        return hidden_states, residual
 
 class Qwen2Model(nn.Module):
 
@@ -72,20 +86,28 @@ class Qwen2Model(nn.Module):
         self.vocab_size = config.vocab_size
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([Qwen2DecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self, 
         input_ids: torch.Tensor,
         positions: torch.Tensor,
         kv_caches: List[KVCache],
-    ) -> Dict[int, Any]:
-        return {}
-
-    def load_weights(
-        self, 
-        model_name_or_path: str,
-    ):
-        pass
+        attn_metadata: AttentionMetadata,
+    ) -> torch.Tensor:
+        hidden_states = self.embed_tokens(input_ids)
+        residual = None
+        for i in range(len(self.layers)):
+            layer = self.layers[i]
+            hidden_states, residual = layer(
+                positions=positions,
+                hidden_states=hidden_states,
+                kv_cache=kv_caches[i],
+                attn_metadata=attn_metadata,
+                residual=residual,
+            )
+        hidden_states, _ = self.norm(hidden_states, residual)
+        return hidden_states
 
 
 class Qwen2ForCausalLM(nn.Module):
@@ -100,8 +122,9 @@ class Qwen2ForCausalLM(nn.Module):
         input_ids: torch.Tensor,
         positions: torch.Tensor,
         kv_caches: List[KVCache],
+        attn_metadata: AttentionMetadata,
     ) -> Dict[int, Any]:
-        hidden_states = self.model(input_ids, positions, kv_caches)
+        hidden_states = self.model(input_ids, positions, kv_caches, attn_metadata)
         # Sampling is not part of the model forward pass. The engine/worker
         # will sample from the hidden states once generation is implemented.
         return hidden_states

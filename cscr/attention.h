@@ -10,7 +10,7 @@
 //   key_cache    : [num_blocks, num_kv_heads, block_size, head_dim]
 //   value_cache  : [num_blocks, num_kv_heads, block_size, head_dim]
 //   block_tables : [num_seqs, max_blocks_per_seq]  (int32)
-//   seq_lens     : [num_seqs]                      (int32)
+//   context_lens : [num_seqs]                      (int32)
 //   out          : [num_seqs, num_heads, head_dim]
 //
 // `query[i]` is the newest token of sequence `i`, so the number of query
@@ -21,6 +21,6 @@ void paged_attention_launch(
     const torch::Tensor& key_cache,
     const torch::Tensor& value_cache,
     const torch::Tensor& block_tables,
-    const torch::Tensor& seq_lens,
+    const torch::Tensor& context_lens,
     double scale,
     c10::cuda::CUDAStream stream);

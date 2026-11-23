@@ -23,7 +23,7 @@ class PagedAttention(nn.Module):
         key_cache: torch.Tensor,
         value_cache: torch.Tensor,
         block_tables: torch.Tensor,
-        seq_lens: torch.Tensor,
+        context_lens: torch.Tensor,
     ) -> torch.Tensor:
         """PagedAttention decode forward.
 
@@ -32,7 +32,7 @@ class PagedAttention(nn.Module):
             key_cache: ``[num_blocks, num_kv_heads, block_size, head_dim]``.
             value_cache: same shape as ``key_cache``.
             block_tables: ``[num_seqs, max_blocks_per_seq]`` int32.
-            seq_lens: ``[num_seqs]`` int32.
+            context_lens: ``[num_seqs]`` int32.
             scale: softmax scale, usually ``head_dim ** -0.5``.
 
         Returns:
@@ -43,7 +43,7 @@ class PagedAttention(nn.Module):
             key_cache=key_cache,
             value_cache=value_cache,
             block_tables=block_tables,
-            seq_lens=seq_lens,
+            context_lens=context_lens,
             scale=self.scale,
         )
 
@@ -124,7 +124,7 @@ class PagedAttentionWithRoPE(PagedAttention):
         key_cache: torch.Tensor,
         value_cache: torch.Tensor,
         block_tables: torch.Tensor,
-        seq_lens: torch.Tensor,
+        context_lens: torch.Tensor,
     ) -> torch.Tensor:
         if query.dim() != 3:
             raise ValueError("query must be [num_tokens, num_heads, head_dim]")
@@ -162,5 +162,5 @@ class PagedAttentionWithRoPE(PagedAttention):
             key_cache,
             value_cache,
             block_tables,
-            seq_lens,
+            context_lens,
         )

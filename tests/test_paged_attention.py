@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from src.model_executor.layers.attention import paged_attention
+from src.model_executor.layers.attention import PagedAttention
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required")
@@ -13,10 +13,10 @@ def test_paged_attention_matches_reference(dtype, num_heads, num_kv_heads):
     num_seqs = 3
     head_dim = 64
     block_size = 8
-    seq_lens_list = [13, 1, 16]
+    context_lens_list = [13, 1, 16]
     scale = head_dim**-0.5
 
-    max_blocks = (max(seq_lens_list) + block_size - 1) // block_size
+    max_blocks = (max(context_lens_list) + block_size - 1) // block_size
     total_blocks = num_seqs * max_blocks
 
     block_tables = torch.full(
@@ -27,7 +27,7 @@ def test_paged_attention_matches_reference(dtype, num_heads, num_kv_heads):
         block_tables[i] = torch.arange(
             start, start + max_blocks, dtype=torch.int32, device=device
         )
-    seq_lens = torch.tensor(seq_lens_list, dtype=torch.int32, device=device)
+    context_lens = torch.tensor(context_lens_list, dtype=torch.int32, device=device)
 
     key_cache = torch.randn(
         total_blocks, num_kv_heads, block_size, head_dim, dtype=dtype, device=device
@@ -35,20 +35,19 @@ def test_paged_attention_matches_reference(dtype, num_heads, num_kv_heads):
     value_cache = torch.randn_like(key_cache)
     query = torch.randn(num_seqs, num_heads, head_dim, dtype=dtype, device=device)
 
-    out = paged_attention(
-        query, key_cache, value_cache, block_tables, seq_lens, scale
-    )
+    attn = PagedAttention(num_heads, head_dim, scale)
+    out = attn(query, key_cache, value_cache, block_tables, context_lens)
 
     ref = torch.empty_like(out)
     group_size = num_heads // num_kv_heads
-    for seq, seq_len in enumerate(seq_lens_list):
+    for seq, context_len in enumerate(context_lens_list):
         blocks = block_tables[seq].long()
         keys = key_cache[blocks].permute(0, 2, 1, 3).reshape(
             -1, num_kv_heads, head_dim
-        )[:seq_len]
+        )[:context_len]
         values = value_cache[blocks].permute(0, 2, 1, 3).reshape(
             -1, num_kv_heads, head_dim
-        )[:seq_len]
+        )[:context_len]
         keys = keys.repeat_interleave(group_size, dim=1)
         values = values.repeat_interleave(group_size, dim=1)
 

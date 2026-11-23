@@ -28,7 +28,7 @@ __global__ void paged_attention_kernel(
     const scalar_t* __restrict__ key_cache,
     const scalar_t* __restrict__ value_cache,
     const int* __restrict__ block_tables,
-    const int* __restrict__ seq_lens,
+    const int* __restrict__ context_lens,
     int num_heads,
     int num_kv_heads,
     int head_dim,
@@ -57,13 +57,13 @@ __global__ void paged_attention_kernel(
     }
     __syncthreads();
 
-    const int seq_len = seq_lens[seq_idx];
+    const int context_len = context_lens[seq_idx];
     const int* block_table = block_tables + static_cast<int64_t>(seq_idx) * max_blocks_per_seq;
 
     float running_max = -INFINITY;
     float running_sum = 0.0f;
 
-    for (int pos = 0; pos < seq_len; ++pos) {
+    for (int pos = 0; pos < context_len; ++pos) {
         const int logical_block = pos / block_size;
         const int slot = pos % block_size;
         const int physical_block = block_table[logical_block];
@@ -114,7 +114,7 @@ void paged_attention_launch(
     const torch::Tensor& key_cache,
     const torch::Tensor& value_cache,
     const torch::Tensor& block_tables,
-    const torch::Tensor& seq_lens,
+    const torch::Tensor& context_lens,
     double scale,
     c10::cuda::CUDAStream stream) 
 {
@@ -138,7 +138,7 @@ void paged_attention_launch(
                 key_cache.data_ptr<scalar_t>(),
                 value_cache.data_ptr<scalar_t>(),
                 block_tables.data_ptr<int>(),
-                seq_lens.data_ptr<int>(),
+                context_lens.data_ptr<int>(),
                 num_heads,
                 num_kv_heads,
                 head_dim,

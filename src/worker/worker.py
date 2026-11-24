@@ -171,8 +171,9 @@ class Worker:
         input_tokens = self._pad_to_aligment(input_tokens, alignment=8)
         input_postions = self._pad_to_aligment(input_postions, alignment=8)
 
-        input_tensor = torch.LongTensor(input_tokens)
-        position_tensor = torch.LongTensor(input_postions)
+        device = next(self.model.parameters()).device
+        input_tensor = torch.tensor(input_tokens, dtype=torch.long, device=device)
+        position_tensor = torch.tensor(input_postions, dtype=torch.long, device=device)
         attn_metadata = self.attn_backend.make_metadata(
             is_prompt=False,
             slot_mapping=None,

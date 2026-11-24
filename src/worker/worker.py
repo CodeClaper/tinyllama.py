@@ -3,6 +3,8 @@ import random
 import numpy as np
 
 from typing import Dict, List, Tuple
+from src.attention.backends.abstract import AttentionMetadata
+from src.attention.selector import get_attn_backend
 from src.config import CacheConfig, ModelConfig, SchedulerConfig
 from src.core.cache_engine import CacheEgnine
 from src.model_executor.model_loader import load_model
@@ -27,6 +29,11 @@ class Worker:
             model_config=model_config,
         )
         self.block_size = cache_config.block_size
+        self.attn_backend = get_attn_backend(
+            self.model_config.dtype 
+            if model_config is not None 
+            else torch.get_default_dtype()
+        )
 
     @torch.inference_mode()
     def profile_num_available_blocks(
@@ -57,12 +64,13 @@ class Worker:
                 block_tables=None,
             )
             seqs.append(seq)
-        input_tokens, input_postions = self._prepare_inputs(seqs)
+        input_tokens, input_postions, attn_metadata = self._prepare_inputs(seqs)
         num_layers = self.model_config.get_num_layers()
         self.model(
             input_ids=input_tokens,
             positions=input_postions,
             kv_caches=[(None, None)] * num_layers,
+            attn_metadata=attn_metadata,
         )
 
         # Calculate the number of blocks that can be allocated with 
@@ -84,7 +92,7 @@ class Worker:
     def _prepare_inputs(
         self, 
         seq_group_metadata_list: List[SequenceGroupMetadata]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, AttentionMetadata]:
         seq_groups: List[Tuple[List[int], SamplerParams]] = []
         input_tokens: List[int] = []
         input_postions: List[int] = []
@@ -165,8 +173,25 @@ class Worker:
 
         input_tensor = torch.LongTensor(input_tokens)
         position_tensor = torch.LongTensor(input_postions)
+        attn_metadata = self.attn_backend.make_metadata(
+            is_prompt=False,
+            slot_mapping=None,
+            prompt_lens=None,
+            prompt_lens_tensor=None,
+            num_prompt_tokens=0,
+            num_generation_tokens=len(input_tokens),
+            max_subquery_len=None,
+            max_context_len=max_context_len,
+            max_prompt_len=None,
+            subquery_start_loc=None,
+            seq_start_loc=None,
+            context_lens=context_lens,
+            block_tables=None,
+            use_cuda_graph=False,
+            kv_cache_dtype="auto",
+        )
 
-        return input_tensor, position_tensor
+        return (input_tensor, position_tensor, attn_metadata)
 
     
     @torch.inference_mode()
@@ -189,7 +214,7 @@ class Worker:
             self.cache_engine.copy(blocks_to_copy)
             issued_cache_op = True
 
-        input_tensor, position_tensor = self._prepare_inputs(seq_group_metadata_list)
+        input_tensor, position_tensor, attn_metadata = self._prepare_inputs(seq_group_metadata_list)
         kv_caches = self.cache_engine.get_kv_cache(Device.GPU)
 
         # Execute the model.
@@ -197,6 +222,7 @@ class Worker:
             input_ids=input_tensor,
             positions=position_tensor,
             kv_caches=kv_caches,
+            attn_metadata=attn_metadata,
         )
         return output
 

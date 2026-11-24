@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import torch
 
 from typing import Optional, List, Tuple, Type
+
 from src.attention.backends.abstract import AttentionBackend, AttentionImpl, AttentionMetadata
 from src.attention.paged_attn import PagedAttention, PagedAttentionMetadata
 
@@ -130,6 +131,10 @@ class FlashAttentionBacked(AttentionBackend):
     @staticmethod
     def get_impl_cls() -> Type[FlashAttentionImpl]:
         return FlashAttentionImpl
+
+    @staticmethod
+    def make_metadata(*args, **kwargs) -> FlashAttentionMetadata:
+        return FlashAttentionMetadata(*args, **kwargs)
 
     @staticmethod
     def get_kv_cache_shape(

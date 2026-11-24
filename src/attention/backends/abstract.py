@@ -48,6 +48,11 @@ class AttentionBackend(ABC):
     @abstractmethod
     def get_impl_cls() -> Type[AttentionImpl]:
         raise NotImplementedError
+
+    @staticmethod
+    @abstractmethod
+    def make_metadata(*args, **kwargs) -> AttentionMetadata:
+        raise NotImplementedError
     
     @staticmethod
     @abstractmethod

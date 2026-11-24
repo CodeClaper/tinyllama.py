@@ -40,10 +40,10 @@ def _get_model_arch(config: PretrainedConfig) -> type[nn.Module]:
 def load_model(model_config: ModelConfig) -> nn.Module:
     model_class = _get_model_arch(model_config.hf_config)
     torch.set_default_dtype(model_config.dtype)
-    model = model_class(model_config.hf_config)
-    model.load_weights(model_config.model_path, model_config.download_dir, model_config.use_np_weights)
-    model = model.cuda();
-    return model
+    with torch.device("cuda"):
+        model = model_class(model_config.hf_config)
+        model.load_weights(model_config.model_path, model_config.download_dir, model_config.use_np_weights)
+        return model.eval()
 
 
 def _find_weight_files(hf_folder: str) -> tuple[list[str], str]:

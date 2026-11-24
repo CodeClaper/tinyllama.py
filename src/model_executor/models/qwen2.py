@@ -9,6 +9,7 @@ from src.attention.layer import Attention
 from src.defs import KVCache
 from src.model_executor.layers.sampler import Sampler
 from src.model_executor.layers.norm import RMSNorm
+from src.model_executor.layers.rotary_embedding import RotaryEmbedding
 
 class Qwen2Attention(nn.Module):
 
@@ -30,6 +31,16 @@ class Qwen2Attention(nn.Module):
         self.scaling = self.head_dim ** -0.5
         self.max_position = max_position
         self.sliding_window = sliding_window if use_sliding_window else None
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_kv_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_kv_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.rotary_emb = RotaryEmbedding(
+            head_size=self.head_dim,
+            rotary_dim=self.head_dim,
+            max_position_embeddings=self.max_position,
+            base=rope_theta,
+        )
         self.attn = Attention(
             num_heads=num_heads,
             head_size=self.head_dim,
@@ -45,7 +56,26 @@ class Qwen2Attention(nn.Module):
         kv_cache: KVCache,
         attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
-        raise NotImplementedError
+        num_tokens = hidden_states.shape[0]
+
+        query = self.q_proj(hidden_states)
+        key = self.k_proj(hidden_states)
+        value = self.v_proj(hidden_states)
+
+        query = query.view(num_tokens, self.num_heads, self.head_dim)
+        key = key.view(num_tokens, self.num_kv_heads, self.head_dim)
+        value = value.view(num_tokens, self.num_kv_heads, self.head_dim)
+
+        query, key = self.rotary_emb(positions, query, key)
+
+        attn_output = self.attn(
+            query.reshape(num_tokens, self.num_heads * self.head_dim),
+            key.reshape(num_tokens, self.num_kv_heads * self.head_dim),
+            value.reshape(num_tokens, self.num_kv_heads * self.head_dim),
+            kv_cache,
+            attn_metadata,
+        )
+        return self.o_proj(attn_output)
 
 
 class Qwen2DecoderLayer(nn.Module):

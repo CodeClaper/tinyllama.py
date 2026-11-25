@@ -155,3 +155,5 @@ class ModelList(BaseModel):
     object: str = "list"
     data: list[ModelCard] = Field(default_factory=list)
 
+def kvcache_is_empty(kvcache: KVCache) -> bool:
+    return kvcache[0] is None and kvcache[1] is None

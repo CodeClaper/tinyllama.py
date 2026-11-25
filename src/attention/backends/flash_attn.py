@@ -6,11 +6,13 @@ from typing import Optional, List, Tuple, Type
 
 from src.attention.backends.abstract import AttentionBackend, AttentionImpl, AttentionMetadata
 from src.attention.paged_attn import PagedAttention, PagedAttentionMetadata
+from src.defs import KVCache, kvcache_is_empty
+
 
 @dataclass
 class FlashAttentionMetadata(AttentionMetadata, PagedAttentionMetadata):
     """
-    Metadata for FlashAttentionBacked.
+    Metadata for FlashAttentionBackend.
 
     Args:
         is_prompt: Input sequences can only contain all prompts or all decoding. True if all sequences are prompts.
@@ -64,7 +66,7 @@ class FlashAttentionImpl(AttentionImpl):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        kv_cache: Optional[torch.Tensor],
+        kv_cache: KVCache,
         attn_metadata: FlashAttentionMetadata,
     ) -> torch.Tensor:
         """
@@ -88,25 +90,47 @@ class FlashAttentionImpl(AttentionImpl):
         
         key_cache: Optional[torch.Tensor] = None
         value_cache: Optional[torch.Tensor] = None
-        if kv_cache is not None:
+        if not kvcache_is_empty(kv_cache):
             key_cache, value_cache = PagedAttention.split_kv_cache(kv_cache, self.num_kv_heads, self.head_size)
             # Reshape the input keys and values and store them in the cache.,
             PagedAttention.write_to_paged_cache(key, value, key_cache, value_cache, attn_metadata.slot_mapping, attn_metadata.kv_cache_dtype)
         
         if attn_metadata.is_prompt:
-            output = PagedAttention.forward_prefix(
-                query=query,
-                key=key,
-                value=value,
-                key_cache=key_cache,
-                value_cache=value_cache,
-                block_tables=attn_metadata.block_tables,
-                subquery_start_loc=attn_metadata.subquery_start_loc,
-                prompt_lens_tensor=attn_metadata.prompt_lens_tensor,
-                context_lens=attn_metadata.context_lens,
-                max_subquery_len=attn_metadata.max_context_len,
-                alibi_slopes=self.alibi_slopes
-            )
+            if key_cache is None or attn_metadata.block_tables.numel() == 0:
+                try:
+                    from flash_attn import flash_attn_varlen_func
+                except ImportError:
+                    raise ImportError(
+                        "flash_attn is required for prompt attention without a "
+                        "cached prefix. Please install flash-attn."
+                    )
+                output = flash_attn_varlen_func(
+                    q=query,
+                    k=key,
+                    v=value,
+                    cu_seqlens_q=attn_metadata.seq_start_loc,
+                    cu_seqlens_k=attn_metadata.seq_start_loc,
+                    max_seqlen_q=attn_metadata.max_prompt_len,
+                    max_seqlen_k=attn_metadata.max_prompt_len,
+                    softmax_scale=self.scale,
+                    causal=True,
+                    alibi_slopes=self.alibi_slopes,
+                    window_size=self.sliding_window,
+                )
+            else:
+                output = PagedAttention.forward_prefix(
+                    query=query,
+                    key=key,
+                    value=value,
+                    key_cache=key_cache,
+                    value_cache=value_cache,
+                    block_tables=attn_metadata.block_tables,
+                    subquery_start_loc=attn_metadata.subquery_start_loc,
+                    prompt_lens_tensor=attn_metadata.prompt_lens_tensor,
+                    context_lens=attn_metadata.context_lens,
+                    max_subquery_len=attn_metadata.max_context_len,
+                    alibi_slopes=self.alibi_slopes
+                )
         else:
             if key_cache is None or value_cache is None:
                 raise ValueError("kv_cache is required for decoding")

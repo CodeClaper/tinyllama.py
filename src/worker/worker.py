@@ -174,8 +174,10 @@ class Worker:
         device = next(self.model.parameters()).device
         input_tensor = torch.tensor(input_tokens, dtype=torch.long, device=device)
         position_tensor = torch.tensor(input_postions, dtype=torch.long, device=device)
+
+        is_prompt = any(seq_group_metadata.is_prompt for seq_group_metadata in seq_group_metadata_list)
         attn_metadata = self.attn_backend.make_metadata(
-            is_prompt=False,
+            is_prompt=is_prompt,
             slot_mapping=None,
             prompt_lens=None,
             prompt_lens_tensor=None,

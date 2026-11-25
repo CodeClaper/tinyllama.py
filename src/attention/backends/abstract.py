@@ -5,6 +5,8 @@ from typing import Dict, List, Tuple, Any, Optional, Type
 
 import torch
 
+from src.defs import KVCache
+
 
 @dataclass
 class AttentionMetadata:
@@ -36,7 +38,7 @@ class AttentionImpl(ABC):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        kv_cache: Optional[torch.Tensor],
+        kv_cache: KVCache,
         attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
         raise NotImplementedError

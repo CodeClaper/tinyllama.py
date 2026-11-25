@@ -5,6 +5,7 @@ import torch.nn as nn
 
 from src.attention.backends.abstract import AttentionMetadata
 from src.attention.selector import get_attn_backend
+from src.defs import KVCache
 
 class Attention(nn.Module):
     """
@@ -46,7 +47,7 @@ class Attention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        kv_cache: Optional[torch.Tensor],
+        kv_cache: KVCache,
         attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
         return self.impl.forward(query, key, value, kv_cache, attn_metadata)

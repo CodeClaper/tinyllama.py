@@ -4,6 +4,7 @@ import torch
 from typing import Optional, Tuple
 from cscr import cache as _C
 from cscr import attention as _A
+from src.defs import KVCache
 
 
 @dataclass
@@ -29,14 +30,14 @@ class PagedAttention:
 
     @staticmethod
     def split_kv_cache(
-        kv_cache: torch.Tensor,
+        kv_cache: KVCache,
         num_kv_heads: int,
         head_size: int,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        x = 16 // kv_cache.element_size()
-        num_blocks = kv_cache.shape[1]
 
         key_cache = kv_cache[0]
+        x = 16 // key_cache.element_size()
+        num_blocks = key_cache.shape[1]
         key_cache = key_cache.view(num_blocks, num_kv_heads, head_size // x, -1, x)
 
         value_cache = kv_cache[1]

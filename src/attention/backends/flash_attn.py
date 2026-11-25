@@ -150,7 +150,7 @@ class FlashAttentionImpl(AttentionImpl):
         return output.view(num_tokens, hidden_size)
 
 
-class FlashAttentionBacked(AttentionBackend):
+class FlashAttentionBackend(AttentionBackend):
     
     @staticmethod
     def get_impl_cls() -> Type[FlashAttentionImpl]:

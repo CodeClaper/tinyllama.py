@@ -5,15 +5,19 @@ from typing import Type
 from loguru import logger
 
 from src.attention.backends.abstract import AttentionBackend
-from src.attention.backends.flash_attn import FlashAttentionBacked
 from src.utils import is_hip
 
 
 @lru_cache(maxsize=None)
 def get_attn_backend(dtype: torch.dtype) -> Type[AttentionBackend]:
     if _can_use_flash_attn(dtype=dtype):
-        return FlashAttentionBacked
-    return FlashAttentionBacked
+        logger.info("Use Flashattention backend.")
+        from src.attention.backends.flash_attn import FlashAttentionBackend
+        return FlashAttentionBackend
+    else:
+        from src.attention.backends.xformers import XFormersBackend
+        logger.info("use XFormers backend.")
+        return XFormersBackend
 
 
 def _can_use_flash_attn(dtype: torch.dtype) -> bool:
